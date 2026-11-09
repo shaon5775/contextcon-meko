@@ -21,9 +21,16 @@ again and again** because nobody keeps a shared record of what worked.
 
 ## 2. The product
 
-**Yojana Saathi** ("scheme companion") is a multi-agent help desk. A citizen asks in plain Bengali,
-Hindi or English. The agents check what the whole desk already learned before they start solving.
+**Yojana Saathi** ("scheme companion") is a multi-agent help desk. A citizen **speaks or types** in their own
+language. The agents check what the whole desk already learned before they start solving.
 When a caseworker approves a fix, every agent knows it from then on.
+
+**Voice first, any Indian language.** Many rural users cannot type. They press the microphone and talk;
+Gemini writes down what they said in their own script (Bengali, Hindi, Tamil, Telugu, Marathi, Gujarati,
+Kannada, Malayalam, Odia, Punjabi, Assamese, Urdu, English, Hinglish), the help desk answers in the same
+language, and the answer is read aloud. One approved fix in shared memory serves every language: a fix
+learned from a Bengali speaker is reused for a Tamil speaker. Code: `saathi/voice.py`; check:
+`scripts/test_voice.py`. Later: a phone (IVR) number for feature phones.
 
 | Agent | Job | Meko features it uses |
 |---|---|---|
@@ -66,7 +73,7 @@ de-identified fixes are promoted to the shared layer. No Aadhaar numbers or phon
 |---|---|---|
 | 1 | 9–15 Nov | ✅ Setup (accounts, repo, datapack). Code skeleton, knowledge files, tickets, offline tests |
 | 2 | 16–22 Nov | Run live with Meko + Gemini on your machine/Colab. Upload knowledge base |
-| 3 | 23–29 Nov | Caseworker review screen, memory promote, multilingual answers |
+| 3 | 23–29 Nov | Caseworker review screen, memory promote, voice in/out tested with real speakers, more languages in tickets |
 | 4 | 30 Nov–6 Dec | Evaluation: baseline vs Meko, results table |
 | 5 | 7–13 Dec | Audit view from traces, audit report artifact |
 | 6 | 14–20 Dec | Rule-change demo (scheme replaced → memory updated), polish UI |

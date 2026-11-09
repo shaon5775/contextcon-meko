@@ -53,12 +53,15 @@ async def approve(res, caseworker: str):
 speak_tab, type_tab = st.tabs(["🎤 Speak", "⌨️ Type"])
 question = ""
 with speak_tab:
+    codes = ["", "bn", "hi", "en", "ta", "te", "mr", "gu", "kn", "ml", "or", "pa", "as", "ur"]
+    hint = st.selectbox("Your language (optional)", codes,
+                        format_func=lambda c: "Detect automatically" if not c else language_name(c))
     audio = st.audio_input("Press the microphone and say your problem in your own language")
     if audio is not None:
-        key = hash(audio.getvalue())
+        key = (hash(audio.getvalue()), hint)
         if st.session_state.get("heard_key") != key:
             with st.spinner("Listening..."):
-                st.session_state.heard = voice().listen(audio.getvalue(), audio.type or "audio/wav")
+                st.session_state.heard = voice().listen(audio.getvalue(), audio.type or "audio/wav", hint)
                 st.session_state.heard_key = key
         heard = st.session_state.get("heard", {})
         st.text_area("We heard (you can correct it):", value=heard.get("text", ""), key="heard_text", height=80)

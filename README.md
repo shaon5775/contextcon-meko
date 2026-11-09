@@ -8,12 +8,12 @@ fixable blockers: a name that doesn't match Aadhaar, an eKYC OTP that never arri
 that isn't Aadhaar-seeded. Help desks solve these **again and again** because nobody shares what worked.
 
 Yojana Saathi's agents **search before solving**. When a caseworker approves a fix, every agent knows it from then on,
-in every language.
+in every language. Citizens who cannot type can simply **speak**; the answer is read back to them aloud.
 
 ## How it works
 
 ```
-Citizen question (bn / hi / en / Hinglish)
+Citizen speaks 🎤 or types (Bengali, Hindi, Tamil, ... any Indian language)
         │
         ▼
  Triage agent ──► Meko context_search (memory + knowledge base + past conversations, one call)
@@ -49,24 +49,33 @@ Run `python eval/run_eval.py` to fill `eval/results.md`. It compares, on the sam
 - **Baseline:** the full rulebook in every prompt, no memory.
 - **Meko:** retrieval plus shared memory, with first-time vs repeat issues reported separately.
 
-**Live run, 9 Nov 2026** (real Meko + Gemini `gemini-3.5-flash-lite`, 36 tickets, fresh run tag, simulated caseworker):
+**Latest live run (run 3, 9 Nov 2026):** real Meko + Gemini `gemini-3.5-flash-lite`, 36 tickets, fresh run tag,
+simulated caseworker.
 
 | Run | Tokens | Tokens / ticket | Avg latency (s) | Avg steps | Accuracy |
 |---|---|---|---|---|---|
-| Baseline (full rulebook, no memory) | 145,093 | 4,030 | 3.5 | 2.0 | 78% |
-| Meko (retrieval + shared memory) | **61,221** | **1,701** | 19.4 | 3.0 | **86%** |
+| Baseline (full rulebook, no memory) | 151,237 | 4,201 | 2.9 | 2.0 | 97% |
+| Meko (retrieval + shared memory) | **79,410** | **2,206** | 18.4 | 3.0 | 94% |
 
 | Meko group | Tickets | Tokens / ticket | Accuracy |
 |---|---|---|---|
-| First time an issue is seen | 10 | 2,319 | 80% |
-| Repeat issue | 26 | 1,463 | 88% |
+| First time an issue is seen | 10 | 2,766 | 100% |
+| Repeat issue | 26 | 1,990 | 92% |
 
-- **58% fewer tokens** for the same tickets, with higher accuracy.
-- 19 of 26 repeat tickets reused a fix that another agent had learned and a caseworker approved.
-- Latency: almost all of Meko's extra time is `context_search` (about 14 s per call on the free tier in this run);
-  model time is lower than the baseline. Free-tier rate-limit waits are excluded from latency.
-- "Correct" = right issue + every expected key fact present (equivalent wordings accepted, see
-  `data/tickets.jsonl`). `python eval/rescore.py --show-wrong` prints every answer marked wrong for a human check.
+- **47% fewer tokens** for the same 36 tickets, at almost the same accuracy (94% vs 97%).
+- Repeat tickets cost 28% less than first-time tickets, because the approved fix is reused instead of re-solved.
+- The 2 Meko misses (T25, T26) reused a correct widow-pension fix that left out the death-certificate document.
+- Latency: almost all of Meko's extra time is memory search inside `context_search` (median ~12 s per call on the
+  free tier; knowledge search alone is ~1.3 s, see `scripts/time_search.py`). Rate-limit waits are excluded.
+- "Correct" = right issue + every expected key fact present (equivalent wordings accepted, `!` = must not appear;
+  see `data/tickets.jsonl`). Each expected fact was set to match what the question actually asks, after reading
+  every wrong answer by hand. `python eval/rescore.py --show-wrong` prints every answer marked wrong.
+
+| Run (9 Nov) | What changed | Baseline acc. | Meko acc. | Token saving |
+|---|---|---|---|---|
+| 1 | first live run | 75% | 53% | 62% |
+| 2 | triage issue meanings, reused summary = approved fix, synonyms | 78% | 86% | 58% |
+| 3 | same-issue reuse only, de-identified shared fixes, JSON retry, per-question facts | 97% | 94% | 47% |
 
 ## Quick start
 
