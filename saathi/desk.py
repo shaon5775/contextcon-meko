@@ -67,7 +67,8 @@ class TicketResult:
     llm_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    latency_s: float = 0.0
+    latency_s: float = 0.0       # agent time, excluding free-tier rate-limit waits
+    waited_s: float = 0.0
     steps: list = field(default_factory=list)     # human-readable decision trace
     conversation_id: str | None = None
     reused_memory_id: str | None = None
@@ -131,22 +132,27 @@ def _as_list(x: Any) -> list:
 
 class HelpDesk:
     def __init__(self, meko, llm, knowledge_text: str, use_memory: bool = True,
-                 same_issue_min_score: float = 0.2, any_issue_min_score: float = 0.7):
+                 same_issue_min_score: float = 0.2, any_issue_min_score: float = 0.7,
+                 run_tag: str | None = None):
         """Reuse rule: a verified fix is reused when it is tagged with the SAME issue and its relevance score
         is at least `same_issue_min_score`, or when its score alone is at least `any_issue_min_score`.
-        Both thresholds are calibrated on the live Meko scores (see eval/)."""
+        Both thresholds are calibrated on the live Meko scores (see eval/).
+        `run_tag` (used by the evaluation) limits reuse to fixes approved in the same run, so every
+        evaluation starts from empty memory without deleting anyone's real fixes."""
         self.meko = meko
         self.llm = llm
         self.knowledge_text = knowledge_text
         self.use_memory = use_memory
         self.same_issue_min_score = same_issue_min_score
         self.any_issue_min_score = any_issue_min_score
+        self.run_tag = run_tag
 
     # -------------------------------------------------------------- helpers
     async def _ask(self, res: TicketResult, name: str, system: str, prompt: str) -> dict:
         reply = self.llm.complete(system, prompt)
         res.llm_calls += 1
         res.input_tokens += reply.input_tokens
+        res.waited_s += getattr(reply, "waited_s", 0.0)
         res.output_tokens += reply.output_tokens
         if self.use_memory and res.conversation_id:
             await self.meko.track_tokens(res.conversation_id, name, reply.model, reply.input_tokens,
@@ -166,6 +172,8 @@ class HelpDesk:
                 except json.JSONDecodeError:
                     meta = {}
             if meta.get("type") != "verified_fix":
+                continue
+            if self.run_tag and meta.get("run_tag") != self.run_tag:
                 continue
             same_issue = issue_key != "other" and meta.get("issue_key") == issue_key
             score = float(m.get("score") or 0)
@@ -231,7 +239,7 @@ class HelpDesk:
         res.answer = out.get("answer", "")
         res.summary_en = out.get("summary_en", "")
         res.sources = out.get("sources", []) or []
-        res.latency_s = round(time.perf_counter() - t0, 3)
+        res.latency_s = round(time.perf_counter() - t0 - res.waited_s, 3)
 
         # 4. Store the conversation turn with its reasoning, so the trace explains the decision
         if self.use_memory:
@@ -254,6 +262,8 @@ class HelpDesk:
         text = f"VERIFIED FIX [{scheme_part}]: {res.summary_en} (Approved by {caseworker}.)"
         meta = {"type": "verified_fix", "issue_key": res.issue_key, "intent": res.intent,
                 "approved_by": caseworker, "ticket": res.ticket_id, "sources": res.sources[:5]}
+        if self.run_tag:
+            meta["run_tag"] = self.run_tag
         added = await self.meko.memory_add(text, res.conversation_id, AGENT_CASEWORKER, meta)
         mem_ids = [r.get("id") for r in _as_list(added) if r.get("id")]
         if promote and mem_ids:

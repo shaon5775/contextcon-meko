@@ -13,6 +13,7 @@ class LLMReply:
     input_tokens: int
     output_tokens: int
     model: str
+    waited_s: float = 0.0   # time spent sleeping on rate limits (excluded from latency)
 
     def json(self) -> dict:
         """Parse a JSON object from the reply, tolerating ```json fences."""
@@ -52,6 +53,7 @@ class GeminiLLM:
             temperature=0.2,
             response_mime_type="application/json" if want_json else "text/plain",
         )
+        waited = 0.0
         for attempt in range(6):  # free tier: back off and retry on rate limits / brief outages
             try:
                 resp = self.client.models.generate_content(model=self.model, contents=prompt, config=cfg)
@@ -63,12 +65,14 @@ class GeminiLLM:
                 wait = 15 * (attempt + 1)
                 print(f"  (Gemini busy or rate-limited, retrying in {wait}s)")
                 time.sleep(wait)
+                waited += wait
         usage = getattr(resp, "usage_metadata", None)
         return LLMReply(
             text=resp.text or "",
             input_tokens=getattr(usage, "prompt_token_count", None) or rough_tokens(system + prompt),
             output_tokens=getattr(usage, "candidates_token_count", None) or rough_tokens(resp.text or ""),
             model=self.model,
+            waited_s=waited,
         )
 
 
