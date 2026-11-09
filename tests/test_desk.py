@@ -116,3 +116,16 @@ def test_shared_fix_is_the_general_version():
     res.general_fix = "Anyone whose PM-KISAN name does not match Aadhaar should use Name Correction as per Aadhaar."
     run(desk.approve(res))
     assert "Anyone whose" in meko.memories[-1]["memory"]
+
+
+def test_voice_offline_round_trip():
+    import wave, io
+    from saathi.voice import MockVoice, pcm_to_wav, speakable
+    v = MockVoice()
+    heard = v.listen(b"fake-audio")
+    assert heard["language"] == "bn" and heard["text"]
+    res = run(HelpDesk(*build(offline=True)).handle(heard["text"], "voice"))
+    assert res.language == "bn" and res.issue_key == "kisan_name_mismatch"
+    with wave.open(io.BytesIO(v.speak(res.answer, res.language))) as w:
+        assert w.getframerate() == 24000
+    assert "http" not in speakable("Visit https://pmkisan.gov.in **now**")
