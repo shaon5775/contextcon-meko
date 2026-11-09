@@ -30,10 +30,17 @@ def load_tickets() -> list[dict]:
 
 
 def missing_facts(res, ticket) -> list[str]:
-    """Expected key facts not found. Each fact may list equivalent wordings: "bpl|below poverty line"."""
+    """Expected key facts not found. Each fact may list equivalent wordings: "bpl|below poverty line".
+    A fact starting with "!" must NOT appear (e.g. "!not eligible" when the right answer is "eligible")."""
     text = f"{res.summary_en} {res.answer}".lower()
-    return [k.split("|")[0] for k in ticket["keywords"]
-            if not any(alt.strip().lower() in text for alt in k.split("|"))]
+    missing = []
+    for k in ticket["keywords"]:
+        if k.startswith("!"):
+            if any(alt.strip().lower() in text for alt in k[1:].split("|")):
+                missing.append(k)
+        elif not any(alt.strip().lower() in text for alt in k.split("|")):
+            missing.append(k.split("|")[0])
+    return missing
 
 
 def is_correct(res, ticket) -> bool:
