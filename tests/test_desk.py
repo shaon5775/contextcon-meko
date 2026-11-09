@@ -59,3 +59,23 @@ def test_meko_features_used_and_tokens_tracked():
 def test_reply_json_tolerates_code_fences():
     r = LLMReply(text='```json\n{"answer": "ok"}\n```', input_tokens=1, output_tokens=1, model="x")
     assert r.json() == {"answer": "ok"}
+
+
+def test_language_detected_from_script():
+    from saathi.desk import detect_language
+    assert detect_language("আমার পিএম কিষাণের টাকা আসছে না", "auto") == "bn"
+    assert detect_language("मेरा पीएम किसान का पैसा रुक गया है", "auto") == "hi"
+    assert detect_language("Mera PM Kisan ka paisa nahi aa raha hai", "auto") == "hinglish"
+    assert detect_language("My PM Kisan money has stopped", "auto") == "en"
+    assert detect_language("আমার টাকা", "en") == "bn"          # script beats a wrong model guess
+
+
+def test_weak_match_is_not_reused():
+    meko, llm, kb = build(offline=True)
+    desk = HelpDesk(meko, llm, kb)
+    memories = [{"id": "m1", "score": 0.1, "memory": "x",
+                 "metadata": {"type": "verified_fix", "issue_key": "kisan_name_mismatch"}}]
+    assert desk._pick_verified_fix(memories, "kisan_name_mismatch") is None      # same issue, too weak
+    memories[0]["score"] = 0.3
+    assert desk._pick_verified_fix(memories, "kisan_name_mismatch")["id"] == "m1"  # same issue, strong enough
+    assert desk._pick_verified_fix(memories, "kisan_ekyc_otp") is None           # other issue, not strong enough
