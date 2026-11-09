@@ -1,7 +1,7 @@
 # PM Ujjwala Yojana (PMUY): free LPG connection
 
 Official portal: https://pmuy.gov.in
-Compiled: November 2026. Always confirm current rules on the portal or at the LPG distributor.
+Checked against official sites: 9 Nov 2026. Compiled: November 2026. Always confirm current rules on the portal or at the LPG distributor.
 
 ## What it gives
 - Deposit-free LPG connection in the woman's name.
@@ -20,4 +20,4 @@ Compiled: November 2026. Always confirm current rules on the portal or at the LP
 - Offline: visit the nearest LPG distributor with the KYC form and documents.
 
 ## Help
-- Helpline: 1800-266-6696 or 1906 (LPG emergency).
+- Ujjwala helpline: 14438 (also 1800-266-6696). General toll-free LPG helpline: 14428. LPG emergency (leak): 1906.

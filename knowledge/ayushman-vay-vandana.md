@@ -1,7 +1,7 @@
 # Ayushman Bharat PM-JAY and the Ayushman Vay Vandana Card (senior citizens 70+)
 
 Official portal: https://pmjay.gov.in (and the Ayushman App)
-Compiled: November 2026, from the National Health Authority and public guides. Always confirm current rules on the portal.
+Checked against official sites: 9 Nov 2026. Compiled: November 2026, from the National Health Authority and public guides. Always confirm current rules on the portal.
 
 ## PM-JAY (general)
 - Cashless hospital treatment up to Rs 5 lakh per family per year at empanelled hospitals.

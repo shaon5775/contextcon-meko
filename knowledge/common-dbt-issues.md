@@ -1,6 +1,6 @@
 # Common problems across all Direct Benefit Transfer (DBT) schemes
 
-Compiled: November 2026.
+Checked against official sites: 9 Nov 2026. Compiled: November 2026.
 
 ## Aadhaar not seeded with bank account (NPCI mapper)
 - Benefit money is paid to the bank account that is Aadhaar-seeded in the NPCI mapper.

@@ -1,7 +1,7 @@
 # PM-KISAN (Pradhan Mantri Kisan Samman Nidhi)
 
 Official portal: https://pmkisan.gov.in
-Compiled: November 2026, from the official portal and public guides. Always confirm current rules on the portal.
+Checked against official sites: 9 Nov 2026. Compiled: November 2026, from the official portal and public guides. Always confirm current rules on the portal.
 
 ## What it gives
 - Rs 6,000 per year per eligible farmer family, paid in three instalments of Rs 2,000.
@@ -14,7 +14,8 @@ Compiled: November 2026, from the official portal and public guides. Always conf
 ## Who is NOT eligible (examples of exclusions)
 - Institutional landholders (organisations, institutions, companies owning farm land).
 - Families where a member falls under the scheme's exclusion categories (higher economic status groups listed in the guidelines, such as income-tax payers and certain government employees and pensioners). If one member is excluded, the family is excluded.
-- Cases under review include farmers who acquired land ownership after 01-02-2019.
+- Land ownership cut-off date: land must be in the farmer's own name as on 01-02-2019. Land acquired after that date does not qualify, except land received by succession (inheritance) after the owner's death.
+- Cultivating land that is still in a father's or forefather's name does not qualify; the land must be in the applicant's own name.
 
 ## Mandatory requirements
 - **eKYC is mandatory.** Without eKYC, further instalments are not paid.
@@ -28,6 +29,7 @@ Compiled: November 2026, from the official portal and public guides. Always conf
 ### Name in PM-KISAN does not match Aadhaar
 - Use "Name Correction as per Aadhaar" (Farmers Corner) on pmkisan.gov.in.
 - The portal asks for face-authentication through the PM-KISAN mobile app, or bio-authentication (biometric eKYC) at a CSC.
+- If the record was rejected in Aadhaar (UIDAI) demo authentication, use "Edit Aadhaar Failure Records" on pmkisan.gov.in.
 - Offline: visit the CSC or the Agriculture Department office with Aadhaar, land record, bank passbook and PM-KISAN registration number.
 - After correction, the pending instalment may come in the next cycle.
 
