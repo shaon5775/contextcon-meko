@@ -71,18 +71,35 @@ de-identified fixes are promoted to the shared layer. No Aadhaar numbers or phon
 | 5 | 7–13 Dec | Audit view from traces, audit report artifact |
 | 6 | 14–20 Dec | Rule-change demo (scheme replaced → memory updated), polish UI |
 | 7 | 21–27 Dec | Hardening, README, architecture diagram |
-| 8 | 28 Dec–3 Jan | Record demo video (under 5 min) |
+| 8 | 28 Dec–3 Jan | Slide deck (PDF, about 10 slides) + record demo video (under 5 min) |
 | 9 | 4–10 Jan | Buffer: fixes, feedback from Discord |
 | 10 | 11–17 Jan | Submit on HackerEarth (target: 15 Jan, 2 days early) |
 
-## 6. Business path after the hackathon
+## 6. What we submit (HackerEarth form, checked 9 Nov 2026)
+
+| Field | Required | Our plan |
+|---|---|---|
+| Title, description | yes | "Yojana Saathi: never solve the same welfare problem twice" + summary from this README |
+| Theme | yes | Challenge 2: Never Solve It Twice |
+| Video URL (under 5 min) | yes | YouTube (unlisted) demo walkthrough |
+| Presentation (PDF / PPTX, max 50 MB) | yes | About 10 slides: problem, users, architecture, Meko features used, live demo shots, results table, governance, business path |
+| Repository URL | yes | github.com/shaon5775/contextcon-meko |
+| Source code upload (zip, max 50 MB) | yes | zip of the repository |
+| Instructions to run | no | Quick-start section of the README |
+| Demo link | no | Hosted Streamlit demo, if time allows |
+
+Challenge 02 must-haves we cover: support agents connected to Meko; 36 synthetic tickets with repeats (≥ 30 needed);
+first-time vs repeat comparison of time, tokens and number of steps; a demo of one agent reusing a fix that another
+agent learned; human approval before a fix is saved (encouraged).
+
+## 7. Business path after the hackathon
 
 - **Customers:** Common Service Centre (CSC) operators, NGOs working on welfare access, state
   e-governance and social-welfare departments, CSR programmes.
 - **Model:** per-desk monthly subscription for CSCs/NGOs; licence for state departments.
 - **Moat:** the verified-fix memory grows with every resolved case, and that is hard to copy.
 
-## 7. Disclaimer
+## 8. Disclaimer
 
 Scheme rules change. Every answer points citizens to the official portal or office to confirm.
 All tickets are synthetic; no real citizen data is used.
