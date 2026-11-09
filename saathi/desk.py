@@ -17,17 +17,29 @@ AGENT_ELIGIBILITY = "yojana_saathi:eligibility"
 AGENT_RESOLVER = "yojana_saathi:resolver"
 AGENT_CASEWORKER = "yojana_saathi:caseworker"
 
-ISSUE_KEYS = [
-    "kisan_name_mismatch", "kisan_ekyc_otp", "kisan_aadhaar_seeding", "vayvandana_apply", "vayvandana_cghs",
-    "oldage_pension_eligibility", "widow_pension_eligibility", "ujjwala_existing_lpg", "ujjwala_migrant_docs",
-    "wb_women_support_change", "other",
-]
+ISSUE_MEANING = {
+    "kisan_name_mismatch": "PM-KISAN money stopped because the name does not match Aadhaar (spelling, name mismatch)",
+    "kisan_ekyc_otp": "PM-KISAN eKYC fails because the OTP does not arrive (old or closed mobile number)",
+    "kisan_aadhaar_seeding": "PM-KISAN payment failed: bank account not Aadhaar-seeded, NPCI mapper, DBT failure",
+    "vayvandana_apply": "Ayushman Bharat card / Ayushman Vay Vandana for a person aged 70 or more: who can get it, "
+                        "how to apply, the Rs 5 lakh senior health card",
+    "vayvandana_cghs": "a 70+ senior who already has CGHS, ECHS or another government health scheme asks about Vay Vandana",
+    "oldage_pension_eligibility": "old-age pension (NSAP / IGNOAPS, budhapa pension, bardhakya bhata) eligibility or how to apply",
+    "widow_pension_eligibility": "widow pension (IGNWPS, bidhoba bhata) eligibility or documents",
+    "ujjwala_existing_lpg": "PM Ujjwala free gas connection when the household ALREADY has an LPG connection",
+    "ujjwala_migrant_docs": "PM Ujjwala for a migrant family without local address proof",
+    "wb_women_support_change": "West Bengal Lakshmir Bhandar / Annapurna Bhandar monthly money for women",
+    "other": "anything else",
+}
+ISSUE_KEYS = list(ISSUE_MEANING)
+_ISSUE_LINES = "\n".join(f"    {k}: {v}" for k, v in ISSUE_MEANING.items())
 
 TRIAGE_SYSTEM = f"""[agent:triage] You are the triage agent of Yojana Saathi, an Indian government-scheme help desk.
 Read the citizen's question (it may be in Bengali, Hindi, English or Hinglish).
 Return ONLY a JSON object with keys:
   scheme      - the scheme name in English (or "unknown")
-  issue_key   - one of {ISSUE_KEYS}
+  issue_key   - exactly one of these keys (pick the closest; use "other" only if none fits):
+{_ISSUE_LINES}
   intent      - "eligibility" (which scheme / can I get it / how to apply) or "problem" (something failed or stopped)
   language    - the citizen's language: "bn", "hi", "en" or "hinglish"
   summary_en  - one short English sentence describing the need, with no names, phone or Aadhaar numbers
@@ -40,7 +52,9 @@ Write the answer in the citizen's language ({language}), in simple words, as sho
 Always end by telling the citizen to confirm on the official portal or office, and never to pay middlemen.
 Return ONLY a JSON object with keys:
   answer      - the reply to the citizen, in their language
-  summary_en  - the same advice in one or two English sentences (for the caseworker)
+  summary_en  - the same advice in one or two English sentences (for the caseworker). Keep the key facts
+                (ages, eligible / not eligible, documents, where to go) and the official terms used in the
+                CONTEXT (e.g. BPL, eKYC, Aadhaar seeding, Name Correction as per Aadhaar, self-declaration)
   issue_key   - the issue you solved (from triage)
   sources     - list of document names or memory ids you used
   confidence  - number 0..1
@@ -226,10 +240,11 @@ class HelpDesk:
                 res.path = "fresh"
                 if not kb:
                     kb = _as_list(await self.meko.kb_search(query, res.conversation_id, specialist, limit=4))
-                context = "\n\n".join(f"[{_doc_of(c)}]\n{_text_of(c)}" for c in kb[:4]) or "(no documents found)"
+                context = "\n\n".join(f"[{_doc_of(c)}]\n{_text_of(c)}" for c in kb[:5]) or "(no documents found)"
                 out = await self._ask(res, role, SPECIALIST_SYSTEM.format(agent=role, role=role, language=res.language),
                                       f"CONTEXT:\n{context}\n\nQUESTION: {text}")
-                res.steps.append(f"{role.title()} agent solved fresh from {len(kb[:4])} knowledge chunks")
+                res.steps.append(f"{role.title()} agent solved fresh from {len(kb[:5])} knowledge chunks "
+                                 f"({', '.join(sorted({_doc_of(c) for c in kb[:5]}))})")
         else:  # Baseline: stuff the entire rulebook into the prompt, no memory
             res.path = "baseline"
             out = await self._ask(res, role, SPECIALIST_SYSTEM.format(agent=role, role=role, language=res.language),
@@ -238,6 +253,11 @@ class HelpDesk:
 
         res.answer = out.get("answer", "")
         res.summary_en = out.get("summary_en", "")
+        if res.path == "reused":
+            # The caseworker summary of a reused answer is the approved fix itself, word for word,
+            # so the audit shows exactly which verified advice was given.
+            approved = re.sub(r"^VERIFIED FIX \[[^\]]*\]:\s*", "", _text_of(fix))
+            res.summary_en = re.sub(r"\s*\(Approved by [^)]*\)\.?\s*$", "", approved)
         res.sources = out.get("sources", []) or []
         res.latency_s = round(time.perf_counter() - t0 - res.waited_s, 3)
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
@@ -56,6 +57,7 @@ class MekoClient:
         self.url = url
         self._stack: AsyncExitStack | None = None
         self._session = None
+        self.timings: dict[str, list[float]] = {}   # seconds per Meko tool call, for the evaluation
 
     async def __aenter__(self) -> "MekoClient":
         from mcp import ClientSession  # imported lazily so tests run without network
@@ -83,7 +85,9 @@ class MekoClient:
     async def call(self, tool: str, **args: Any) -> Any:
         args = {k: v for k, v in args.items() if v is not None}
         args.setdefault("datapack_id", self.datapack_id)
+        t0 = time.perf_counter()
         result = await self._session.call_tool(tool, args)
+        self.timings.setdefault(tool, []).append(time.perf_counter() - t0)
         if getattr(result, "isError", False) or getattr(result, "is_error", False):
             raise RuntimeError(f"Meko tool {tool} failed: {_parse_tool_result(result)}")
         data = _parse_tool_result(result)
