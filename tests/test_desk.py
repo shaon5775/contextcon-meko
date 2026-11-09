@@ -79,3 +79,13 @@ def test_weak_match_is_not_reused():
     memories[0]["score"] = 0.3
     assert desk._pick_verified_fix(memories, "kisan_name_mismatch")["id"] == "m1"  # same issue, strong enough
     assert desk._pick_verified_fix(memories, "kisan_ekyc_otp") is None           # other issue, not strong enough
+
+
+def test_run_tag_ignores_fixes_from_other_runs():
+    meko, llm, kb = build(offline=True)
+    old = HelpDesk(meko, llm, kb)                        # a real fix approved earlier, no tag
+    run(old.approve(run(old.handle(TICKETS[0]["text"], "T01"))))
+    tagged = HelpDesk(meko, llm, kb, run_tag="eval-1")
+    assert run(tagged.handle(TICKETS[1]["text"], "T02")).path == "fresh"   # old fix ignored
+    run(tagged.approve(run(tagged.handle(TICKETS[0]["text"], "T01"))))
+    assert run(tagged.handle(TICKETS[2]["text"], "T03")).path == "reused"  # same-run fix reused
