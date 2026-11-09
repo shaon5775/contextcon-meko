@@ -103,7 +103,7 @@ FACTS = {
     "kisan_aadhaar_seeding": "Ask your bank branch for Aadhaar seeding (NPCI mapper) for DBT, or open an IPPB account.",
     "vayvandana_apply": "Anyone aged 70 or above can get the Vay Vandana card; there is no income limit. Apply on the Ayushman App with Aadhaar eKYC.",
     "vayvandana_cghs": "A CGHS or ECHS member must choose one: Vay Vandana or CGHS/ECHS.",
-    "oldage_pension_eligibility": "IGNOAPS needs age 60 or above and a BPL household; apply at the block or municipality office.",
+    "oldage_pension_eligibility": "You are eligible for IGNOAPS if aged 60 or above and from a BPL household; apply at the block or municipality office.",
     "widow_pension_eligibility": "IGNWPS widow pension: widow aged 40-79, BPL; bring the husband's death certificate.",
     "ujjwala_existing_lpg": "A household that already has an LPG connection is not eligible for Ujjwala.",
     "ujjwala_migrant_docs": "Migrant families can give a self-declaration instead of address proof.",

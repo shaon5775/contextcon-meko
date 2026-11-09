@@ -35,13 +35,14 @@ ISSUE_KEYS = list(ISSUE_MEANING)
 _ISSUE_LINES = "\n".join(f"    {k}: {v}" for k, v in ISSUE_MEANING.items())
 
 TRIAGE_SYSTEM = f"""[agent:triage] You are the triage agent of Yojana Saathi, an Indian government-scheme help desk.
-Read the citizen's question (it may be in Bengali, Hindi, English or Hinglish).
+Read the citizen's question (it may be in any Indian language, English or Hinglish, often typed from speech).
 Return ONLY a JSON object with keys:
   scheme      - the scheme name in English (or "unknown")
   issue_key   - exactly one of these keys (pick the closest; use "other" only if none fits):
 {_ISSUE_LINES}
   intent      - "eligibility" (which scheme / can I get it / how to apply) or "problem" (something failed or stopped)
-  language    - the citizen's language: "bn", "hi", "en" or "hinglish"
+  language    - the citizen's language as a short code: bn, hi, en, hinglish, ta, te, mr, gu, kn, ml, or, pa,
+                as, ur (or another ISO 639-1 code)
   summary_en  - one short English sentence describing the need, with no names, phone or Aadhaar numbers
   profile     - object with any of: age, gender, state, bpl (true/false), occupation
 """
@@ -55,6 +56,9 @@ Return ONLY a JSON object with keys:
   summary_en  - the same advice in one or two English sentences (for the caseworker). Keep the key facts
                 (ages, eligible / not eligible, documents, where to go) and the official terms used in the
                 CONTEXT (e.g. BPL, eKYC, Aadhaar seeding, Name Correction as per Aadhaar, self-declaration)
+  general_fix_en - the fix written for ANYONE with this problem, in English, with no personal details
+                (no ages of this person, no relations like mother/father, no names, places or numbers that
+                identify them). Keep the rule itself, e.g. "Anyone aged 70 or above is eligible ...".
   issue_key   - the issue you solved (from triage)
   sources     - list of document names or memory ids you used
   confidence  - number 0..1
@@ -77,6 +81,7 @@ class TicketResult:
     language: str
     answer: str
     summary_en: str
+    general_fix: str = ""       # de-identified fix that may be shared after approval
     sources: list = field(default_factory=list)
     llm_calls: int = 0
     input_tokens: int = 0
@@ -115,19 +120,34 @@ def _doc_of(item: Any) -> str:
     return "knowledge"
 
 
-LANGUAGES = {"bn", "hi", "en", "hinglish"}
+# Unicode blocks of Indian scripts -> language code (Bengali script is shared by Bengali and Assamese;
+# Devanagari by Hindi and Marathi: the model's guess decides between those pairs).
+_SCRIPTS = [("\u0980", "\u09ff", "bn"), ("\u0900", "\u097f", "hi"), ("\u0b80", "\u0bff", "ta"),
+            ("\u0c00", "\u0c7f", "te"), ("\u0a80", "\u0aff", "gu"), ("\u0c80", "\u0cff", "kn"),
+            ("\u0d00", "\u0d7f", "ml"), ("\u0b00", "\u0b7f", "or"), ("\u0a00", "\u0a7f", "pa"),
+            ("\u0600", "\u06ff", "ur")]
+_SAME_SCRIPT = {"bn": {"as"}, "hi": {"mr", "ne"}}
+LANGUAGE_NAMES = {"bn": "Bengali", "hi": "Hindi", "en": "English", "hinglish": "Hinglish (Hindi in Latin letters)",
+                  "ta": "Tamil", "te": "Telugu", "mr": "Marathi", "gu": "Gujarati", "kn": "Kannada",
+                  "ml": "Malayalam", "or": "Odia", "pa": "Punjabi", "as": "Assamese", "ur": "Urdu", "ne": "Nepali"}
+LANGUAGES = set(LANGUAGE_NAMES)
+
+
+def language_name(code: str) -> str:
+    return f"{LANGUAGE_NAMES.get(code, code)} ({code})"
 _HINGLISH_WORDS = {"mera", "meri", "mere", "kya", "hai", "hain", "nahi", "nahin", "paisa", "kaise", "kab",
                    "milega", "milta", "karu", "karun", "karna", "raha", "rahi", "gaya", "bhai", "ji", "ko"}
 
 
 def detect_language(text: str, model_guess: str | None = None) -> str:
-    """The citizen's language. Script is checked first because it is certain: Bengali letters → bn,
-    Devanagari → hi. Latin text uses the model's guess if valid, else a small Hinglish word check."""
-    bengali = sum(1 for ch in text if "ঀ" <= ch <= "৿")
-    devanagari = sum(1 for ch in text if "ऀ" <= ch <= "ॿ")
-    if bengali or devanagari:
-        return "bn" if bengali >= devanagari else "hi"
+    """The citizen's language. The script is checked first because it is certain (Bengali letters -> bn,
+    Tamil letters -> ta, ...). Scripts shared by two languages use the model's guess to choose. Latin text uses
+    the model's guess if valid, else a small Hinglish word check."""
     guess = (model_guess or "").strip().lower()
+    counts = {code: sum(1 for ch in text if lo <= ch <= hi) for lo, hi, code in _SCRIPTS}
+    code, n = max(counts.items(), key=lambda kv: kv[1])
+    if n:
+        return guess if guess in _SAME_SCRIPT.get(code, set()) else code
     if guess in {"en", "hinglish"}:
         return guess
     words = set(re.findall(r"[a-z]+", text.lower()))
@@ -149,7 +169,9 @@ class HelpDesk:
                  same_issue_min_score: float = 0.2, any_issue_min_score: float = 0.7,
                  run_tag: str | None = None):
         """Reuse rule: a verified fix is reused when it is tagged with the SAME issue and its relevance score
-        is at least `same_issue_min_score`, or when its score alone is at least `any_issue_min_score`.
+        is at least `same_issue_min_score`. Only when triage could not name the issue ("other") may a fix be
+        reused on score alone (>= `any_issue_min_score`). (Live run 2: a high-scoring Ayushman fix was wrongly
+        reused for a CGHS question, so cross-issue reuse is off.)
         Both thresholds are calibrated on the live Meko scores (see eval/).
         `run_tag` (used by the evaluation) limits reuse to fixes approved in the same run, so every
         evaluation starts from empty memory without deleting anyone's real fixes."""
@@ -168,9 +190,17 @@ class HelpDesk:
         res.input_tokens += reply.input_tokens
         res.waited_s += getattr(reply, "waited_s", 0.0)
         res.output_tokens += reply.output_tokens
-        if self.use_memory and res.conversation_id:
-            await self.meko.track_tokens(res.conversation_id, name, reply.model, reply.input_tokens,
-                                         reply.output_tokens)
+        self._model = reply.model
+        try:
+            return reply.json()
+        except (ValueError, json.JSONDecodeError):
+            pass
+        # Live run 2: one reply came back as broken JSON. Ask once more, then fall back to the raw text.
+        reply = self.llm.complete(system, prompt + "\n\nReturn ONLY one valid JSON object, nothing else.")
+        res.llm_calls += 1
+        res.input_tokens += reply.input_tokens
+        res.output_tokens += reply.output_tokens
+        res.waited_s += getattr(reply, "waited_s", 0.0)
         try:
             return reply.json()
         except (ValueError, json.JSONDecodeError):
@@ -193,7 +223,7 @@ class HelpDesk:
             score = float(m.get("score") or 0)
             if same_issue and score >= self.same_issue_min_score:
                 why = f"same issue tag, score {score:.2f} ≥ {self.same_issue_min_score:.2f}"
-            elif score >= self.any_issue_min_score:
+            elif issue_key == "other" and score >= self.any_issue_min_score:
                 why = f"score {score:.2f} ≥ {self.any_issue_min_score:.2f}"
             else:
                 continue
@@ -221,7 +251,8 @@ class HelpDesk:
 
         # 2. Search before solving (Meko mode only)
         if self.use_memory:
-            query = f"{tri.get('scheme', '')} {res.issue_key.replace('_', ' ')}: {tri.get('summary_en', text)}"
+            meaning = ISSUE_MEANING.get(res.issue_key, "")
+            query = f"{tri.get('scheme', '')}: {meaning}. {tri.get('summary_en', text)}"
             ctx = await self.meko.context_search(query, res.conversation_id, AGENT_TRIAGE, limit=5)
             buckets = ctx.get("results", ctx) if isinstance(ctx, dict) else {}
             memories = _as_list(buckets.get("memory"))
@@ -233,7 +264,7 @@ class HelpDesk:
             if fix:  # 3a. Reuse the caseworker-approved fix
                 res.path = "reused"
                 res.reused_memory_id = fix.get("id")
-                out = await self._ask(res, "resolver_reuse", REUSE_SYSTEM.format(language=res.language),
+                out = await self._ask(res, "resolver_reuse", REUSE_SYSTEM.format(language=language_name(res.language)),
                                       f"APPROVED FIX (memory {fix.get('id')}):\n{_text_of(fix)}\n\nQUESTION: {text}")
                 res.steps.append(f"Resolver reused approved fix {fix.get('id')} ({fix['why']})")
             else:    # 3b. Solve fresh from retrieved official rules
@@ -241,18 +272,19 @@ class HelpDesk:
                 if not kb:
                     kb = _as_list(await self.meko.kb_search(query, res.conversation_id, specialist, limit=4))
                 context = "\n\n".join(f"[{_doc_of(c)}]\n{_text_of(c)}" for c in kb[:5]) or "(no documents found)"
-                out = await self._ask(res, role, SPECIALIST_SYSTEM.format(agent=role, role=role, language=res.language),
+                out = await self._ask(res, role, SPECIALIST_SYSTEM.format(agent=role, role=role, language=language_name(res.language)),
                                       f"CONTEXT:\n{context}\n\nQUESTION: {text}")
                 res.steps.append(f"{role.title()} agent solved fresh from {len(kb[:5])} knowledge chunks "
                                  f"({', '.join(sorted({_doc_of(c) for c in kb[:5]}))})")
         else:  # Baseline: stuff the entire rulebook into the prompt, no memory
             res.path = "baseline"
-            out = await self._ask(res, role, SPECIALIST_SYSTEM.format(agent=role, role=role, language=res.language),
+            out = await self._ask(res, role, SPECIALIST_SYSTEM.format(agent=role, role=role, language=language_name(res.language)),
                                   f"CONTEXT:\n{self.knowledge_text}\n\nQUESTION: {text}")
             res.steps.append(f"{role.title()} agent answered with the full rulebook in the prompt")
 
         res.answer = out.get("answer", "")
         res.summary_en = out.get("summary_en", "")
+        res.general_fix = out.get("general_fix_en", "") or ""
         if res.path == "reused":
             # The caseworker summary of a reused answer is the approved fix itself, word for word,
             # so the audit shows exactly which verified advice was given.
@@ -263,6 +295,8 @@ class HelpDesk:
 
         # 4. Store the conversation turn with its reasoning, so the trace explains the decision
         if self.use_memory:
+            await self.meko.track_tokens(res.conversation_id, "LLM Response (triage + answer)",
+                                         getattr(self, "_model", "unknown"), res.input_tokens, res.output_tokens)
             # Meko requires the agent that created the conversation (triage) to write its turns;
             # the specialist that actually answered is recorded in the metadata.
             await self.meko.add_turn(
@@ -279,7 +313,8 @@ class HelpDesk:
         if not self.use_memory or res.path == "reused" or not res.summary_en:
             return None
         scheme_part = res.issue_key.replace("_", " ")
-        text = f"VERIFIED FIX [{scheme_part}]: {res.summary_en} (Approved by {caseworker}.)"
+        # Only the de-identified, general version of the fix is shared (falls back to the summary).
+        text = f"VERIFIED FIX [{scheme_part}]: {res.general_fix or res.summary_en} (Approved by {caseworker}.)"
         meta = {"type": "verified_fix", "issue_key": res.issue_key, "intent": res.intent,
                 "approved_by": caseworker, "ticket": res.ticket_id, "sources": res.sources[:5]}
         if self.run_tag:
