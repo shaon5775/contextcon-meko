@@ -20,7 +20,7 @@ class Settings:
     meko_api_key: str = os.getenv("MEKO_API_KEY", "")
     meko_datapack_id: str = os.getenv("MEKO_DATAPACK_ID", "")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 
 def load_knowledge() -> str:

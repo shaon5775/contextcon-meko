@@ -26,13 +26,22 @@ def rough_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+# Checked 9 Nov 2026 on a new free-tier key: gemini-2.5-* is closed to new users, gemini-3.8-flash timed out,
+# gemini-3.5-flash-lite answered in about 1 s. Override with the GEMINI_MODEL environment variable.
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+
 class GeminiLLM:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = DEFAULT_GEMINI_MODEL):
         from google import genai
 
         if not api_key:
             raise ValueError("GEMINI_API_KEY is missing. Put it in your .env file.")
-        self.client = genai.Client(api_key=api_key)
+        from google.genai import types
+
+        # 60 s per call and no hidden library retries: we retry ourselves below, visibly.
+        self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
+            timeout=60_000, retry_options=types.HttpRetryOptions(attempts=1)))
         self.model = model
 
     def complete(self, system: str, prompt: str, want_json: bool = True) -> LLMReply:
@@ -49,7 +58,7 @@ class GeminiLLM:
                 break
             except Exception as e:  # noqa: BLE001
                 msg = str(e)
-                if attempt == 5 or not any(code in msg for code in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")):
+                if attempt == 5 or not any(code in msg for code in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "504", "DEADLINE")):
                     raise
                 wait = 15 * (attempt + 1)
                 print(f"  (Gemini busy or rate-limited, retrying in {wait}s)")
