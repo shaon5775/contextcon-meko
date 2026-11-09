@@ -1,0 +1,101 @@
+"""Voice in, voice out, for citizens who cannot type.
+
+    listen(audio_bytes) -> {"text": what the person said, in their own script, "language": "bn"}
+    speak(text, language) -> WAV bytes of the answer read aloud (or None if speech is unavailable)
+
+Both use Gemini (free tier). Gemini understands speech in most Indian languages, so the citizen can talk in
+Bengali, Hindi, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Odia, Punjabi, Assamese, Urdu, English or
+a mix. Spoken text then goes through the normal help desk (triage -> Meko memory -> answer).
+"""
+from __future__ import annotations
+
+import io
+import json
+import os
+import re
+import wave
+
+from .desk import LANGUAGE_NAMES
+
+LISTEN_MODEL = os.getenv("GEMINI_LISTEN_MODEL", "gemini-3.5-flash-lite")
+SPEAK_MODEL = os.getenv("GEMINI_SPEAK_MODEL", "gemini-3.8-flash-lite-tts")
+SPEAK_VOICE = os.getenv("GEMINI_SPEAK_VOICE", "Kore")
+
+LISTEN_PROMPT = """Write down exactly what this person says, word for word, in the language and script they
+speak (Bengali in Bengali script, Hindi in Devanagari, Tamil in Tamil script, and so on; Hinglish in Latin
+letters). Do not translate and do not answer. Return ONLY JSON: {"text": "...", "language": "<ISO 639-1 code,
+or hinglish>"}"""
+
+
+def pcm_to_wav(pcm: bytes, rate: int = 24000, channels: int = 1, sample_width: int = 2) -> bytes:
+    """Gemini speech comes back as raw 16-bit PCM; browsers need a WAV header to play it."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(sample_width)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
+def speakable(text: str) -> str:
+    """Remove markdown symbols and URLs that sound strange when read aloud."""
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"[*_#`>|]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+class GeminiVoice:
+    def __init__(self, api_key: str):
+        from google import genai
+        from google.genai import types
+
+        self.types = types
+        self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
+            timeout=90_000, retry_options=types.HttpRetryOptions(attempts=2)))
+
+    def listen(self, audio: bytes, mime_type: str = "audio/wav") -> dict:
+        t = self.types
+        resp = self.client.models.generate_content(
+            model=LISTEN_MODEL,
+            contents=[t.Part.from_bytes(data=audio, mime_type=mime_type), LISTEN_PROMPT],
+            config=t.GenerateContentConfig(temperature=0, response_mime_type="application/json"),
+        )
+        raw = resp.text or "{}"
+        try:
+            out = json.loads(re.search(r"\{.*\}", raw, re.S).group(0))
+        except (AttributeError, json.JSONDecodeError):
+            out = {"text": raw.strip(), "language": ""}
+        return {"text": str(out.get("text", "")).strip(), "language": str(out.get("language", "")).strip().lower()}
+
+    def speak(self, text: str, language: str = "") -> bytes | None:
+        """Read the answer aloud. Returns WAV bytes, or None if the speech model is not available."""
+        t = self.types
+        lang = LANGUAGE_NAMES.get(language, "")
+        prompt = (f"Read this aloud slowly and kindly{', in ' + lang if lang else ''}:\n" if lang else "") + speakable(text)
+        try:
+            resp = self.client.models.generate_content(
+                model=SPEAK_MODEL, contents=prompt,
+                config=t.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=t.SpeechConfig(voice_config=t.VoiceConfig(
+                        prebuilt_voice_config=t.PrebuiltVoiceConfig(voice_name=SPEAK_VOICE)))),
+            )
+            part = resp.candidates[0].content.parts[0]
+            data = part.inline_data.data
+            mime = (part.inline_data.mime_type or "").lower()
+            rate = int(re.search(r"rate=(\d+)", mime).group(1)) if "rate=" in mime else 24000
+            return data if mime.startswith("audio/wav") else pcm_to_wav(data, rate=rate)
+        except Exception as e:  # noqa: BLE001 - speech is a bonus; the text answer is always shown
+            print(f"  (speech unavailable: {str(e)[:160]})")
+            return None
+
+
+class MockVoice:
+    """Offline stand-in: pretends the citizen said a fixed Bengali sentence."""
+
+    def listen(self, audio: bytes, mime_type: str = "audio/wav") -> dict:
+        return {"text": "আমার পিএম কিষাণের টাকা আসছে না, বলছে আধারের সাথে নাম মিলছে না। কী করব?", "language": "bn"}
+
+    def speak(self, text: str, language: str = "") -> bytes | None:
+        return pcm_to_wav(b"\x00\x00" * 2400)   # 0.1 s of silence
