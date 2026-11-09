@@ -21,10 +21,27 @@ LISTEN_MODEL = os.getenv("GEMINI_LISTEN_MODEL", "gemini-3.5-flash-lite")
 SPEAK_MODEL = os.getenv("GEMINI_SPEAK_MODEL", "gemini-3.8-flash-lite-tts")
 SPEAK_VOICE = os.getenv("GEMINI_SPEAK_VOICE", "Kore")
 
-LISTEN_PROMPT = """Write down exactly what this person says, word for word, in the language and script they
-speak (Bengali in Bengali script, Hindi in Devanagari, Tamil in Tamil script, and so on; Hinglish in Latin
-letters). Do not translate and do not answer. Return ONLY JSON: {"text": "...", "language": "<ISO 639-1 code,
-or hinglish>"}"""
+LISTEN_PROMPT = """Write down exactly what this person says, word for word. Do not translate and do not answer.
+Use the NATIVE SCRIPT of the language spoken - never Latin letters for an Indian language:
+Bengali -> বাংলা লিপি, Hindi/Marathi -> देवनागरी, Tamil -> தமிழ், Telugu -> తెలుగు, Gujarati -> ગુજરાતી,
+Kannada -> ಕನ್ನಡ, Malayalam -> മലയാളം, Odia -> ଓଡ଼ିଆ, Punjabi -> ਗੁਰਮੁਖੀ, Urdu -> اردو.
+Only English, or Hindi mixed with English words (Hinglish), may be written in Latin letters.
+English words inside an Indian sentence (PM Kisan, Aadhaar, OTP) may stay in Latin letters.
+{hint}Return ONLY JSON: {{"text": "...", "language": "<ISO 639-1 code, or hinglish>"}}"""
+
+
+def _retry(call, tries: int = 5):
+    """Free tier: wait and retry on rate limits / busy servers (same rule as the text model)."""
+    import time
+    for attempt in range(tries):
+        try:
+            return call()
+        except Exception as e:  # noqa: BLE001
+            if attempt == tries - 1 or not any(c in str(e) for c in ("429", "RESOURCE_EXHAUSTED", "503", "504",
+                                                                     "UNAVAILABLE", "DEADLINE")):
+                raise
+            print(f"  (Gemini busy or rate-limited, retrying in {15 * (attempt + 1)}s)")
+            time.sleep(15 * (attempt + 1))
 
 
 def pcm_to_wav(pcm: bytes, rate: int = 24000, channels: int = 1, sample_width: int = 2) -> bytes:
@@ -54,13 +71,16 @@ class GeminiVoice:
         self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
             timeout=90_000, retry_options=types.HttpRetryOptions(attempts=2)))
 
-    def listen(self, audio: bytes, mime_type: str = "audio/wav") -> dict:
+    def listen(self, audio: bytes, mime_type: str = "audio/wav", language_hint: str = "") -> dict:
+        """language_hint: optional code the user picked (e.g. "bn"); helps the model choose the script."""
         t = self.types
-        resp = self.client.models.generate_content(
+        name = LANGUAGE_NAMES.get(language_hint, language_hint)
+        hint = f"The person is expected to speak {name}.\n" if language_hint else ""
+        resp = _retry(lambda: self.client.models.generate_content(
             model=LISTEN_MODEL,
-            contents=[t.Part.from_bytes(data=audio, mime_type=mime_type), LISTEN_PROMPT],
+            contents=[t.Part.from_bytes(data=audio, mime_type=mime_type), LISTEN_PROMPT.format(hint=hint)],
             config=t.GenerateContentConfig(temperature=0, response_mime_type="application/json"),
-        )
+        ))
         raw = resp.text or "{}"
         try:
             out = json.loads(re.search(r"\{.*\}", raw, re.S).group(0))
@@ -74,13 +94,13 @@ class GeminiVoice:
         lang = LANGUAGE_NAMES.get(language, "")
         prompt = (f"Read this aloud slowly and kindly{', in ' + lang if lang else ''}:\n" if lang else "") + speakable(text)
         try:
-            resp = self.client.models.generate_content(
+            resp = _retry(lambda: self.client.models.generate_content(
                 model=SPEAK_MODEL, contents=prompt,
                 config=t.GenerateContentConfig(
                     response_modalities=["AUDIO"],
                     speech_config=t.SpeechConfig(voice_config=t.VoiceConfig(
                         prebuilt_voice_config=t.PrebuiltVoiceConfig(voice_name=SPEAK_VOICE)))),
-            )
+            ))
             part = resp.candidates[0].content.parts[0]
             data = part.inline_data.data
             mime = (part.inline_data.mime_type or "").lower()
@@ -94,7 +114,7 @@ class GeminiVoice:
 class MockVoice:
     """Offline stand-in: pretends the citizen said a fixed Bengali sentence."""
 
-    def listen(self, audio: bytes, mime_type: str = "audio/wav") -> dict:
+    def listen(self, audio: bytes, mime_type: str = "audio/wav", language_hint: str = "") -> dict:
         return {"text": "আমার পিএম কিষাণের টাকা আসছে না, বলছে আধারের সাথে নাম মিলছে না। কী করব?", "language": "bn"}
 
     def speak(self, text: str, language: str = "") -> bytes | None:
