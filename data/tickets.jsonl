@@ -1,0 +1,36 @@
+{"id": "T01", "lang": "en", "text": "My PM Kisan money has stopped. The status says my name does not match Aadhaar. What should I do?", "issue": "kisan_name_mismatch", "keywords": ["name correction", "aadhaar"]}
+{"id": "T02", "lang": "hi", "text": "मेरा पीएम किसान का पैसा रुक गया है, बोल रहे हैं नाम आधार से मेल नहीं खाता। क्या करूँ?", "issue": "kisan_name_mismatch", "keywords": ["name correction", "aadhaar"]}
+{"id": "T03", "lang": "bn", "text": "আমার পিএম কিষাণের টাকা আসছে না, বলছে আধারের সাথে নাম মিলছে না। কী করব?", "issue": "kisan_name_mismatch", "keywords": ["name correction", "aadhaar"]}
+{"id": "T04", "lang": "hinglish", "text": "Kisan nidhi ki kist nahi aayi, portal pe name mismatch dikha raha hai bhai", "issue": "kisan_name_mismatch", "keywords": ["name correction", "aadhaar"]}
+{"id": "T05", "lang": "en", "text": "My father's PM-KISAN installment is pending because the spelling of his name is different in Aadhaar.", "issue": "kisan_name_mismatch", "keywords": ["name correction", "aadhaar"]}
+{"id": "T06", "lang": "en", "text": "I am trying to do PM Kisan eKYC but the OTP never comes to my phone.", "issue": "kisan_ekyc_otp", "keywords": ["mobile", "biometric"]}
+{"id": "T07", "lang": "hi", "text": "किसान ई-केवाईसी करते समय ओटीपी नहीं आ रहा है।", "issue": "kisan_ekyc_otp", "keywords": ["mobile", "biometric"]}
+{"id": "T08", "lang": "bn", "text": "কিষাণ ই-কেওয়াইসি করতে গেলে ওটিপি আসছে না, পুরোনো নম্বর আধারে আছে।", "issue": "kisan_ekyc_otp", "keywords": ["mobile", "biometric"]}
+{"id": "T09", "lang": "hinglish", "text": "ekyc ke liye otp nahi aa raha, number band ho gaya hai purana", "issue": "kisan_ekyc_otp", "keywords": ["mobile", "biometric"]}
+{"id": "T10", "lang": "en", "text": "PM Kisan status shows 'Aadhaar not seeded' and payment failed. My bank account is fine.", "issue": "kisan_aadhaar_seeding", "keywords": ["bank", "seeding"]}
+{"id": "T11", "lang": "hi", "text": "स्टेटस में लिखा है आधार सीडिंग नहीं हुई, पेमेंट फेल हो गया।", "issue": "kisan_aadhaar_seeding", "keywords": ["bank", "seeding"]}
+{"id": "T12", "lang": "bn", "text": "স্ট্যাটাসে দেখাচ্ছে আধার সিডিং হয়নি, টাকা ফেরত চলে গেছে।", "issue": "kisan_aadhaar_seeding", "keywords": ["bank", "seeding"]}
+{"id": "T13", "lang": "en", "text": "Installment failed with message NPCI mapper not found. What does it mean?", "issue": "kisan_aadhaar_seeding", "keywords": ["bank", "seeding"]}
+{"id": "T14", "lang": "en", "text": "My mother is 72. Can she get the Ayushman card even though we are not poor?", "issue": "vayvandana_apply", "keywords": ["70", "no income limit"]}
+{"id": "T15", "lang": "hi", "text": "मेरे दादाजी 75 साल के हैं, क्या उनको आयुष्मान कार्ड मिलेगा? कैसे बनवाएं?", "issue": "vayvandana_apply", "keywords": ["70", "no income limit"]}
+{"id": "T16", "lang": "bn", "text": "বাবার বয়স ৭১, আয়ুষ্মান বয় বন্দনা কার্ড কীভাবে করব?", "issue": "vayvandana_apply", "keywords": ["70", "no income limit"]}
+{"id": "T17", "lang": "hinglish", "text": "70 plus walo ka 5 lakh wala health card kaise banta hai?", "issue": "vayvandana_apply", "keywords": ["70", "no income limit"]}
+{"id": "T18", "lang": "en", "text": "My father is a retired central government employee on CGHS. He is 74. Should he take the Vay Vandana card?", "issue": "vayvandana_cghs", "keywords": ["cghs", "choose"]}
+{"id": "T19", "lang": "bn", "text": "বাবা প্রাক্তন সেনা, ECHS আছে, বয়স ৭৮। বয় বন্দনা কার্ড নিলে কী হবে?", "issue": "vayvandana_cghs", "keywords": ["echs", "choose"]}
+{"id": "T20", "lang": "en", "text": "I am 63 and my family is on the BPL list. Can I get old age pension?", "issue": "oldage_pension_eligibility", "keywords": ["60", "bpl"]}
+{"id": "T21", "lang": "hi", "text": "मेरी माँ 68 साल की हैं और बीपीएल कार्ड है, वृद्धावस्था पेंशन कैसे मिलेगी?", "issue": "oldage_pension_eligibility", "keywords": ["60", "bpl"]}
+{"id": "T22", "lang": "bn", "text": "আমার বয়স ৬৫, বিপিএল কার্ড আছে। বার্ধক্য ভাতা পাব কী?", "issue": "oldage_pension_eligibility", "keywords": ["60", "bpl"]}
+{"id": "T23", "lang": "hinglish", "text": "budhape ki pension ke liye kya chahiye, umar 61 hai, BPL hai", "issue": "oldage_pension_eligibility", "keywords": ["60", "bpl"]}
+{"id": "T24", "lang": "en", "text": "My aunt is 45, her husband died last year, and they are BPL. Is there a pension for her?", "issue": "widow_pension_eligibility", "keywords": ["widow", "death certificate"]}
+{"id": "T25", "lang": "hi", "text": "मेरी बहन विधवा है, उम्र 50, गरीबी रेखा से नीचे। विधवा पेंशन मिलेगी?", "issue": "widow_pension_eligibility", "keywords": ["widow", "death certificate"]}
+{"id": "T26", "lang": "bn", "text": "আমার বয়স ৪২, স্বামী মারা গেছেন, বিপিএল কার্ড আছে। বিধবা ভাতা পাব?", "issue": "widow_pension_eligibility", "keywords": ["widow", "death certificate"]}
+{"id": "T27", "lang": "en", "text": "We already have an HP gas connection in my husband's name. Can I apply for Ujjwala in my name?", "issue": "ujjwala_existing_lpg", "keywords": ["already", "not eligible"]}
+{"id": "T28", "lang": "hi", "text": "घर में पहले से इंडेन गैस है, क्या मैं उज्ज्वला के लिए अप्लाई कर सकती हूँ?", "issue": "ujjwala_existing_lpg", "keywords": ["already", "not eligible"]}
+{"id": "T29", "lang": "bn", "text": "বাড়িতে ভারত গ্যাসের লাইন আছে, উজ্জ্বলায় নতুন সংযোগ পাব?", "issue": "ujjwala_existing_lpg", "keywords": ["already", "not eligible"]}
+{"id": "T30", "lang": "en", "text": "I moved to Kolkata for work and have no address proof here. Can I get an Ujjwala gas connection?", "issue": "ujjwala_migrant_docs", "keywords": ["self-declaration", "migrant"]}
+{"id": "T31", "lang": "hi", "text": "मैं काम के लिए दिल्ली आई हूँ, यहाँ का पता प्रमाण नहीं है, उज्ज्वला कनेक्शन मिलेगा?", "issue": "ujjwala_migrant_docs", "keywords": ["self-declaration", "migrant"]}
+{"id": "T32", "lang": "hinglish", "text": "migrant hu, address proof nahi hai, ujjwala gas kaise milega", "issue": "ujjwala_migrant_docs", "keywords": ["self-declaration", "migrant"]}
+{"id": "T33", "lang": "bn", "text": "লক্ষ্মীর ভান্ডারের টাকা কত পাব এখন? আমার বয়স ৩৫।", "issue": "wb_women_support_change", "keywords": ["annapurna", "confirm"]}
+{"id": "T34", "lang": "en", "text": "How much is Lakshmir Bhandar now? My wife is 30 and we live in Howrah.", "issue": "wb_women_support_change", "keywords": ["annapurna", "confirm"]}
+{"id": "T35", "lang": "hi", "text": "लक्ष्मी भंडार का पैसा अब कितना मिलता है बंगाल में?", "issue": "wb_women_support_change", "keywords": ["annapurna", "confirm"]}
+{"id": "T36", "lang": "bn", "text": "আমার বয়স ২২, লক্ষ্মীর ভান্ডারে আবেদন করতে পারব?", "issue": "wb_women_support_change", "keywords": ["annapurna", "21"]}
