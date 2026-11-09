@@ -13,6 +13,7 @@ import asyncio
 import csv
 import json
 import sys
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,7 +38,10 @@ async def run_mode(use_memory: bool, offline: bool, tickets: list[dict]) -> list
     meko, llm, knowledge = build(offline=offline, use_memory=use_memory)
     rows = []
     async with meko:
-        desk = HelpDesk(meko, llm, knowledge, use_memory=use_memory)
+        run_tag = f"eval-{uuid.uuid4().hex[:8]}" if use_memory else None
+        if run_tag:
+            print(f"Meko run tag: {run_tag} (only fixes approved in this run are reused)")
+        desk = HelpDesk(meko, llm, knowledge, use_memory=use_memory, run_tag=run_tag)
         seen: set[str] = set()
         for t in tickets:
             res = await desk.handle(t["text"], t["id"])
