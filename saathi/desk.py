@@ -235,10 +235,13 @@ class HelpDesk:
 
         # 4. Store the conversation turn with its reasoning, so the trace explains the decision
         if self.use_memory:
+            # Meko requires the agent that created the conversation (triage) to write its turns;
+            # the specialist that actually answered is recorded in the metadata.
             await self.meko.add_turn(
-                res.conversation_id, specialist, user=text, assistant=res.answer,
+                res.conversation_id, AGENT_TRIAGE, user=text, assistant=res.answer,
                 reasoning=" | ".join(res.steps), plan=res.steps,
-                metadata={"ticket": ticket_id, "path": res.path, "issue_key": res.issue_key,
+                metadata={"ticket": ticket_id, "answered_by": specialist, "path": res.path,
+                          "issue_key": res.issue_key,
                           "reused_memory_id": res.reused_memory_id, "tokens": res.total_tokens},
             )
         return res
