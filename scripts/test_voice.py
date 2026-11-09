@@ -36,7 +36,11 @@ def main() -> None:
             print(f"[{lang}] speak FAILED")
             continue
         (out / f"{lang}.wav").write_bytes(wav)
-        heard = voice.listen(wav, "audio/wav")
+        try:
+            heard = voice.listen(wav, "audio/wav")
+        except Exception as e:  # noqa: BLE001
+            print(f"[{lang}] listen FAILED: {str(e)[:150]}")
+            continue
         t2 = time.perf_counter()
         print(f"[{lang}] speak {t1 - t0:.1f}s ({len(wav) // 1000} KB)  listen {t2 - t1:.1f}s  language={heard['language']}")
         print(f"   said : {text}")
