@@ -49,7 +49,24 @@ Run `python eval/run_eval.py` to fill `eval/results.md`. It compares, on the sam
 - **Baseline:** the full rulebook in every prompt, no memory.
 - **Meko:** retrieval plus shared memory, with first-time vs repeat issues reported separately.
 
-*(Live results table will be added here.)*
+**Live run, 9 Nov 2026** (real Meko + Gemini `gemini-3.5-flash-lite`, 36 tickets, fresh run tag, simulated caseworker):
+
+| Run | Tokens | Tokens / ticket | Avg latency (s) | Avg steps | Accuracy |
+|---|---|---|---|---|---|
+| Baseline (full rulebook, no memory) | 145,093 | 4,030 | 3.5 | 2.0 | 78% |
+| Meko (retrieval + shared memory) | **61,221** | **1,701** | 19.4 | 3.0 | **86%** |
+
+| Meko group | Tickets | Tokens / ticket | Accuracy |
+|---|---|---|---|
+| First time an issue is seen | 10 | 2,319 | 80% |
+| Repeat issue | 26 | 1,463 | 88% |
+
+- **58% fewer tokens** for the same tickets, with higher accuracy.
+- 19 of 26 repeat tickets reused a fix that another agent had learned and a caseworker approved.
+- Latency: almost all of Meko's extra time is `context_search` (about 14 s per call on the free tier in this run);
+  model time is lower than the baseline. Free-tier rate-limit waits are excluded from latency.
+- "Correct" = right issue + every expected key fact present (equivalent wordings accepted, see
+  `data/tickets.jsonl`). `python eval/rescore.py --show-wrong` prints every answer marked wrong for a human check.
 
 ## Quick start
 
