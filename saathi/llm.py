@@ -83,7 +83,7 @@ FACTS = {
     "widow_pension_eligibility": "IGNWPS widow pension: widow aged 40-79, BPL; bring the husband's death certificate.",
     "ujjwala_existing_lpg": "A household that already has an LPG connection is not eligible for Ujjwala.",
     "ujjwala_migrant_docs": "Migrant families can give a self-declaration instead of address proof.",
-    "wb_women_support_change": "Lakshmir Bhandar is replaced by Annapurna Bhandar from June 2026 (age 21+); confirm at the block office.",
+    "wb_women_support_change": "Lakshmir Bhandar is replaced by Annapurna Bhandar from June 2026: Rs 3,000 a month for women aged 25 to 60; confirm at the block office.",
 }
 
 

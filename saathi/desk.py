@@ -7,6 +7,7 @@ Two modes:
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -99,6 +100,25 @@ def _doc_of(item: Any) -> str:
     return "knowledge"
 
 
+LANGUAGES = {"bn", "hi", "en", "hinglish"}
+_HINGLISH_WORDS = {"mera", "meri", "mere", "kya", "hai", "hain", "nahi", "nahin", "paisa", "kaise", "kab",
+                   "milega", "milta", "karu", "karun", "karna", "raha", "rahi", "gaya", "bhai", "ji", "ko"}
+
+
+def detect_language(text: str, model_guess: str | None = None) -> str:
+    """The citizen's language. Script is checked first because it is certain: Bengali letters → bn,
+    Devanagari → hi. Latin text uses the model's guess if valid, else a small Hinglish word check."""
+    bengali = sum(1 for ch in text if "ঀ" <= ch <= "৿")
+    devanagari = sum(1 for ch in text if "ऀ" <= ch <= "ॿ")
+    if bengali or devanagari:
+        return "bn" if bengali >= devanagari else "hi"
+    guess = (model_guess or "").strip().lower()
+    if guess in {"en", "hinglish"}:
+        return guess
+    words = set(re.findall(r"[a-z]+", text.lower()))
+    return "hinglish" if len(words & _HINGLISH_WORDS) >= 2 else "en"
+
+
 def _as_list(x: Any) -> list:
     if isinstance(x, list):
         return x
@@ -110,12 +130,17 @@ def _as_list(x: Any) -> list:
 
 
 class HelpDesk:
-    def __init__(self, meko, llm, knowledge_text: str, use_memory: bool = True, reuse_min_score: float = 0.45):
+    def __init__(self, meko, llm, knowledge_text: str, use_memory: bool = True,
+                 same_issue_min_score: float = 0.2, any_issue_min_score: float = 0.7):
+        """Reuse rule: a verified fix is reused when it is tagged with the SAME issue and its relevance score
+        is at least `same_issue_min_score`, or when its score alone is at least `any_issue_min_score`.
+        Both thresholds are calibrated on the live Meko scores (see eval/)."""
         self.meko = meko
         self.llm = llm
         self.knowledge_text = knowledge_text
         self.use_memory = use_memory
-        self.reuse_min_score = reuse_min_score
+        self.same_issue_min_score = same_issue_min_score
+        self.any_issue_min_score = any_issue_min_score
 
     # -------------------------------------------------------------- helpers
     async def _ask(self, res: TicketResult, name: str, system: str, prompt: str) -> dict:
@@ -144,9 +169,14 @@ class HelpDesk:
                 continue
             same_issue = issue_key != "other" and meta.get("issue_key") == issue_key
             score = float(m.get("score") or 0)
-            if same_issue or score >= self.reuse_min_score + 0.25:
-                if best is None or score > float(best.get("score") or 0):
-                    best = {**m, "metadata": meta}
+            if same_issue and score >= self.same_issue_min_score:
+                why = f"same issue tag, score {score:.2f} ≥ {self.same_issue_min_score:.2f}"
+            elif score >= self.any_issue_min_score:
+                why = f"score {score:.2f} ≥ {self.any_issue_min_score:.2f}"
+            else:
+                continue
+            if best is None or score > float(best.get("score") or 0):
+                best = {**m, "metadata": meta, "why": why}
         return best
 
     # -------------------------------------------------------------- main flow
@@ -161,7 +191,7 @@ class HelpDesk:
         tri = await self._ask(res, "triage", TRIAGE_SYSTEM, f"QUESTION: {text}")
         res.issue_key = tri.get("issue_key", "other")
         res.intent = tri.get("intent", "problem")
-        res.language = tri.get("language", "en")
+        res.language = detect_language(text, tri.get("language"))
         res.steps.append(f"Triage: scheme={tri.get('scheme')}, issue={res.issue_key}, intent={res.intent}, "
                          f"language={res.language}")
         specialist, role = ((AGENT_ELIGIBILITY, "eligibility") if res.intent == "eligibility"
@@ -183,7 +213,7 @@ class HelpDesk:
                 res.reused_memory_id = fix.get("id")
                 out = await self._ask(res, "resolver_reuse", REUSE_SYSTEM.format(language=res.language),
                                       f"APPROVED FIX (memory {fix.get('id')}):\n{_text_of(fix)}\n\nQUESTION: {text}")
-                res.steps.append(f"Resolver reused approved fix {fix.get('id')} (score {fix.get('score')})")
+                res.steps.append(f"Resolver reused approved fix {fix.get('id')} ({fix['why']})")
             else:    # 3b. Solve fresh from retrieved official rules
                 res.path = "fresh"
                 if not kb:
