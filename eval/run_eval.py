@@ -65,6 +65,7 @@ def _stats(rows: list[dict]) -> dict:
         "total_tokens": sum(r["total_tokens"] for r in rows),
         "tokens_per_ticket": round(sum(r["total_tokens"] for r in rows) / n),
         "avg_latency_s": round(sum(r["latency_s"] for r in rows) / n, 2),
+        "avg_steps": round(sum(len(r["steps"]) for r in rows) / n, 1),
         "accuracy": f"{100 * sum(r['correct'] for r in rows) / n:.0f}%",
     }
 
@@ -72,24 +73,25 @@ def _stats(rows: list[dict]) -> dict:
 def summarize(meko_rows: list[dict], base_rows: list[dict]) -> str:
     lines = ["# Yojana Saathi evaluation results", ""]
     table = [("Baseline (full rulebook, no memory)", base_rows), ("Meko (retrieval + shared memory)", meko_rows)]
-    lines += ["| Run | Tickets | LLM calls | Total tokens | Tokens / ticket | Avg latency (s) | Accuracy |",
-              "|---|---|---|---|---|---|---|"]
+    lines += ["| Run | Tickets | LLM calls | Total tokens | Tokens / ticket | Avg latency (s) | Avg steps | Accuracy |",
+              "|---|---|---|---|---|---|---|---|"]
     for name, rows in table:
         if rows:
             s = _stats(rows)
             lines.append(f"| {name} | {s['tickets']} | {s['llm_calls']} | {s['total_tokens']:,} | "
-                         f"{s['tokens_per_ticket']:,} | {s['avg_latency_s']} | {s['accuracy']} |")
+                         f"{s['tokens_per_ticket']:,} | {s['avg_latency_s']} | {s['avg_steps']} | {s['accuracy']} |")
     if meko_rows:
         first = [r for r in meko_rows if r["first_time"]]
         repeat = [r for r in meko_rows if not r["first_time"]]
         reused = [r for r in repeat if r["path"] == "reused"]
         lines += ["", "## Meko: first-time vs repeat issues", "",
-                  "| Group | Tickets | Tokens / ticket | Avg latency (s) | Accuracy |", "|---|---|---|---|---|"]
+                  "| Group | Tickets | Tokens / ticket | Avg latency (s) | Avg steps | Accuracy |",
+                  "|---|---|---|---|---|---|"]
         for name, rows in (("First time an issue is seen", first), ("Repeat issue", repeat)):
             if rows:
                 s = _stats(rows)
                 lines.append(f"| {name} | {s['tickets']} | {s['tokens_per_ticket']:,} | {s['avg_latency_s']} | "
-                             f"{s['accuracy']} |")
+                             f"{s['avg_steps']} | {s['accuracy']} |")
         lines += ["", f"Repeat issues answered by reusing a caseworker-approved fix: "
                       f"**{len(reused)} of {len(repeat)}**."]
     if meko_rows and base_rows:
