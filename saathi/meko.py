@@ -17,13 +17,25 @@ MEKO_URL = "https://mcp.mekodata.ai/mcp"
 USER_AGENT = "yojana-saathi/0.1 (+https://github.com/shaon5775/contextcon-meko)"
 
 
+def _maybe_json(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return {"text": value}
+    return value
+
+
 def _parse_tool_result(result: Any) -> Any:
-    """Turn an MCP CallToolResult into plain Python data."""
+    """Turn an MCP CallToolResult into plain Python data.
+
+    Live Meko (checked 9 Nov 2026) wraps most replies as {"result": "<JSON text>"}; a few (track_token_usage)
+    return a plain dict. Both are unwrapped here."""
     structured = getattr(result, "structuredContent", None) or getattr(result, "structured_content", None)
     if structured:
         # FastMCP wraps non-dict returns as {"result": ...}
         if isinstance(structured, dict) and set(structured) == {"result"}:
-            return structured["result"]
+            return _maybe_json(structured["result"])
         return structured
     texts = [c.text for c in (getattr(result, "content", None) or []) if getattr(c, "text", None)]
     joined = "\n".join(texts)
@@ -74,7 +86,11 @@ class MekoClient:
         result = await self._session.call_tool(tool, args)
         if getattr(result, "isError", False) or getattr(result, "is_error", False):
             raise RuntimeError(f"Meko tool {tool} failed: {_parse_tool_result(result)}")
-        return _parse_tool_result(result)
+        data = _parse_tool_result(result)
+        # Meko reports some failures as a normal reply: {"error": "...", "detail": "..."}
+        if isinstance(data, dict) and data.get("error") and not data.get("results") and not data.get("id"):
+            raise RuntimeError(f"Meko tool {tool} failed: {data}")
+        return data
 
     # ---- convenience wrappers -------------------------------------------------
     async def conversation_create(self, agent_id: str, title: str) -> str:

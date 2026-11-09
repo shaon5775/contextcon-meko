@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 
 
@@ -42,7 +43,17 @@ class GeminiLLM:
             temperature=0.2,
             response_mime_type="application/json" if want_json else "text/plain",
         )
-        resp = self.client.models.generate_content(model=self.model, contents=prompt, config=cfg)
+        for attempt in range(6):  # free tier: back off and retry on rate limits / brief outages
+            try:
+                resp = self.client.models.generate_content(model=self.model, contents=prompt, config=cfg)
+                break
+            except Exception as e:  # noqa: BLE001
+                msg = str(e)
+                if attempt == 5 or not any(code in msg for code in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")):
+                    raise
+                wait = 15 * (attempt + 1)
+                print(f"  (Gemini busy or rate-limited, retrying in {wait}s)")
+                time.sleep(wait)
         usage = getattr(resp, "usage_metadata", None)
         return LLMReply(
             text=resp.text or "",
