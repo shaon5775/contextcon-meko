@@ -29,9 +29,15 @@ def load_tickets() -> list[dict]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
-def is_correct(res, ticket) -> bool:
+def missing_facts(res, ticket) -> list[str]:
+    """Expected key facts not found. Each fact may list equivalent wordings: "bpl|below poverty line"."""
     text = f"{res.summary_en} {res.answer}".lower()
-    return res.issue_key == ticket["issue"] and all(k.lower() in text for k in ticket["keywords"])
+    return [k.split("|")[0] for k in ticket["keywords"]
+            if not any(alt.strip().lower() in text for alt in k.split("|"))]
+
+
+def is_correct(res, ticket) -> bool:
+    return res.issue_key == ticket["issue"] and not missing_facts(res, ticket)
 
 
 async def run_mode(use_memory: bool, offline: bool, tickets: list[dict]) -> list[dict]:
@@ -46,13 +52,20 @@ async def run_mode(use_memory: bool, offline: bool, tickets: list[dict]) -> list
         for t in tickets:
             res = await desk.handle(t["text"], t["id"])
             ok = is_correct(res, t)
+            missing = missing_facts(res, t)
             approved = None
             if use_memory and res.path == "fresh" and ok:
                 approved = await desk.approve(res, caseworker="simulated-caseworker")
             rows.append({**res.to_dict(), "expected_issue": t["issue"], "lang": t["lang"], "correct": ok,
-                         "first_time": t["issue"] not in seen, "approved_memory_id": approved})
+                         "missing_facts": "; ".join(missing), "first_time": t["issue"] not in seen,
+                         "approved_memory_id": approved})
             seen.add(t["issue"])
-            print(f"[{res.mode:8}] {t['id']} {res.path:8} tokens={res.total_tokens:6} correct={ok}")
+            why = "" if ok else (f"  (issue {res.issue_key})" if res.issue_key != t["issue"] else f"  (missing: {', '.join(missing)})")
+            print(f"[{res.mode:8}] {t['id']} {res.path:8} tokens={res.total_tokens:6} correct={ok}{why}")
+        timings = getattr(meko, "timings", None)
+        if use_memory and timings:
+            print("Meko call time (avg s):", ", ".join(f"{k}={sum(v) / len(v):.2f} x{len(v)}"
+                                                   for k, v in sorted(timings.items())))
         if use_memory:
             report = summarize(rows, []).encode()
             conv = rows[-1]["conversation_id"] if rows else None
@@ -128,10 +141,10 @@ async def main() -> None:
     with open(OUT / f"results{suffix}.csv", "w", newline="", encoding="utf-8") as f:
         keys = ["mode", "ticket_id", "lang", "path", "expected_issue", "issue_key", "first_time", "correct",
                 "llm_calls", "input_tokens", "output_tokens", "total_tokens", "latency_s", "reused_memory_id",
-                "approved_memory_id"]
+                "approved_memory_id", "missing_facts", "summary_en", "answer", "steps"]
         w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
         w.writeheader()
-        w.writerows(base + meko)
+        w.writerows({**r, "steps": " | ".join(r.get("steps") or [])} for r in base + meko)
     md = summarize(meko, base)
     (OUT / f"results{suffix}.md").write_text(md, encoding="utf-8")
     print("\n" + md)
