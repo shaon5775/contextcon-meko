@@ -15,7 +15,7 @@ import os
 import re
 import wave
 
-from .desk import LANGUAGE_NAMES
+from .desk import _SAME_SCRIPT, _SCRIPTS, LANGUAGE_NAMES
 
 LISTEN_MODEL = os.getenv("GEMINI_LISTEN_MODEL", "gemini-3.5-flash-lite")
 SPEAK_MODEL = os.getenv("GEMINI_SPEAK_MODEL", "gemini-3.8-flash-lite-tts")
@@ -29,6 +29,16 @@ Only English, or Hindi mixed with English words (Hinglish), may be written in La
 English words inside an Indian sentence (PM Kisan, Aadhaar, OTP) may stay in Latin letters.
 Write the letters themselves (e.g. আমার, मेरे) - NEVER \\u escape codes.
 {hint}Return ONLY JSON: {{"text": "...", "language": "<ISO 639-1 code, or hinglish>"}}"""
+
+
+def script_mismatch(text: str, language: str) -> bool:
+    """True when the text is mostly in another Indian script than the named language uses (e.g. ta in Telugu)."""
+    own = {code for _, _, code in _SCRIPTS}
+    if language not in own:
+        return False
+    counts = {code: sum(1 for ch in text if lo <= ch <= hi) for lo, hi, code in _SCRIPTS}
+    code, n = max(counts.items(), key=lambda kv: kv[1])
+    return bool(n) and code != language and language not in _SAME_SCRIPT.get(code, set())
 
 
 def parse_heard(raw: str) -> dict:
@@ -100,7 +110,12 @@ class GeminiVoice:
             contents=[t.Part.from_bytes(data=audio, mime_type=mime_type), LISTEN_PROMPT.format(hint=hint)],
             config=t.GenerateContentConfig(temperature=0, response_mime_type="application/json"),
         ))
-        return parse_heard(resp.text or "{}")
+        out = parse_heard(resp.text or "{}")
+        # Live 10 Nov 2026: Tamil speech came back as language "ta" but written in TELUGU letters. If the letters do
+        # not match the language the model itself named, ask once more and tell it which language to write.
+        if not language_hint and script_mismatch(out["text"], out["language"]):
+            return self.listen(audio, mime_type, out["language"])
+        return out
 
     def speak(self, text: str, language: str = "") -> bytes | None:
         """Read the answer aloud. Returns WAV bytes, or None if the speech model is not available."""
