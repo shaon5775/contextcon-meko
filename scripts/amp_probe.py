@@ -23,7 +23,7 @@ async def main() -> None:
     async with meko:
         tools = (await meko._session.list_tools()).tools
         print("ALL TOOLS:", ", ".join(sorted(t.name for t in tools)))
-        amp = {t.name: {"description": t.description, "inputs": t.inputSchema}
+        amp = {t.name: {"description": t.description, "inputs": getattr(t, "input_schema", None) or getattr(t, "inputSchema", None)}
                for t in tools if any(w in t.name.lower() for w in WORDS)}
         out = Path(__file__).resolve().parent.parent / "eval" / "amp_tools.json"
         out.write_text(json.dumps(amp, indent=1), encoding="utf-8")
