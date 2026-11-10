@@ -141,3 +141,13 @@ def test_parse_heard_handles_broken_escapes():
     assert out["text"].startswith("আমার PM Kisan-র") and "\\u" not in out["text"]
     assert parse_heard('{"text": "मेरे दादा जी", "language": "HI"}') == {"text": "मेरे दादा जी", "language": "hi"}
     assert parse_heard("no json here")["text"] == "no json here"
+
+
+def test_script_mismatch():
+    from saathi.voice import script_mismatch
+    # Real live case (10 Nov 2026): Tamil speech written in Telugu letters
+    assert script_mismatch("ఎన్నమ్మాఊక్ ఎరుబత్తి రెండు వయత్", "ta")
+    assert not script_mismatch("என் அம்மாவுக்கு எழுபத்திரண்டு வயது", "ta")
+    assert not script_mismatch("আমার PM Kisan-এর টাকা", "bn")
+    assert not script_mismatch("মোৰ নাম", "as")        # Assamese uses the Bengali script
+    assert not script_mismatch("I am 63", "en")
