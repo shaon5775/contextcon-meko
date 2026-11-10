@@ -28,9 +28,38 @@ if "offline_state" not in st.session_state:  # keep the fake store alive between
     st.session_state.offline_state = build(offline=True)
 
 
+async def _connect_ledger():
+    from saathi.desk import AGENT_TRIAGE
+    from saathi.ledger import PgLedger
+    meko, _, _ = build(offline=False)
+    async with meko:
+        conv = await meko.conversation_create(AGENT_TRIAGE, "ledger (demo app)")
+        return await PgLedger.connect(meko, conv, Settings().meko_api_key, create=False, log=lambda *a: None)
+
+
+def get_ledger():
+    """The Postgres ledger INSIDE the Meko datapack (Meko AMP): one row per answer and per caseworker decision.
+    Offline demo = the same tables in SQLite. Connected once per browser session; never blocks the help desk."""
+    key = f"ledger_{'offline' if offline else 'live'}"
+    if key not in st.session_state:
+        if offline:
+            from saathi.ledger import SqliteLedger
+            st.session_state[key] = SqliteLedger()
+        else:
+            try:
+                with st.spinner("Connecting to the Postgres ledger inside the Meko datapack (first time can take ~1 min)..."):
+                    st.session_state[key] = asyncio.run(_connect_ledger())
+            except Exception as e:  # noqa: BLE001 - the help desk still works without the ledger
+                st.session_state[key] = None
+                st.session_state.ledger_error = str(e)[:200]
+    return st.session_state[key]
+
+
 def make_desk() -> tuple:
     meko, llm, kb = st.session_state.offline_state if offline else build(offline=False)
-    return meko, HelpDesk(meko, llm, kb, use_memory=use_memory)
+    desk = HelpDesk(meko, llm, kb, use_memory=use_memory)
+    desk.ledger = get_ledger()
+    return meko, desk
 
 
 def voice():
@@ -143,12 +172,46 @@ def citizen_screen() -> None:
                 st.caption(f"Meko conversation / trace id: `{res.conversation_id}`")
 
 
+async def _save_audit(md: str):
+    from saathi.desk import AGENT_CASEWORKER, AGENT_TRIAGE
+    meko, _ = make_desk()
+    async with meko:
+        conv = await meko.conversation_create(AGENT_TRIAGE, "audit report")
+        await meko.artifact_put("audit-report.md", md.encode(), "text/markdown", conv, AGENT_CASEWORKER)
+
+
+def audit_box() -> None:
+    """Live audit straight from SQL on the Postgres ledger inside the datapack."""
+    from saathi.ledger import audit_markdown
+    ledger = get_ledger()
+    with st.container(border=True):
+        st.markdown("**📊 Audit from Postgres** (the ledger table inside the Meko datapack)")
+        if ledger is None:
+            st.caption("Ledger not connected: " + st.session_state.get("ledger_error", "unknown error"))
+            return
+        try:
+            a = ledger.audit()
+        except Exception as e:  # noqa: BLE001
+            st.caption(f"Could not read the ledger: {str(e)[:150]}")
+            return
+        c = st.columns(5)
+        c[0].metric("Tickets", a["tickets"])
+        c[1].metric("Reused a fix", f"{a['reused']} ({a['reuse_rate_pct']}%)")
+        c[2].metric("Avg tokens fresh", int(a["avg_tokens_fresh"] or 0))
+        c[3].metric("Avg tokens reused", int(a["avg_tokens_reused"] or 0))
+        c[4].metric("Approved / rejected", f"{a['approved']} / {a['rejected']}")
+        if st.button("💾 Save this audit report to Meko (artifact)", key="save_audit"):
+            asyncio.run(_save_audit(audit_markdown(a)))
+            st.success("audit-report.md saved to the Meko datapack.")
+
+
 def review_screen() -> None:
     """Human in the loop: a caseworker checks each NEW fix, may correct it, then approves (-> shared memory) or
     rejects it (-> only the reason is logged in the trace; nothing is remembered)."""
     from saathi.desk import privacy_flags
     st.header("👩‍💼 Caseworker review")
     st.caption("Only fixes you approve go into shared memory. Every agent, in every language, reuses them from then on.")
+    audit_box()
     name = st.text_input("Your name (caseworker)", value="caseworker", key="cw_name")
     promote = st.checkbox("Also promote approved fixes to the shared learnings layer (Meko memory_promote)",
                           value=True, key="cw_promote")
