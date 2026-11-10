@@ -2,6 +2,7 @@
 
     python eval/run_eval.py              # live: Meko + Gemini (needs .env)
     python eval/run_eval.py --offline    # no network: fake Meko + mock LLM (checks the pipeline)
+    python eval/run_eval.py --meko-only  # only the Meko half (baseline skipped)
 
 The simulated caseworker approves a fresh answer only when it solved the right issue and contains the
 expected key facts. Writes eval/results.csv and eval/results.md (also stored in Meko as an artifact).
@@ -155,16 +156,18 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--offline", action="store_true", help="fake Meko + mock LLM, no network")
     ap.add_argument("--limit", type=int, default=0, help="only the first N tickets")
+    ap.add_argument("--meko-only", action="store_true",
+                    help="skip the baseline (saves half the model calls); writes results-meko-only.*")
     args = ap.parse_args()
     tickets = load_tickets()
     if args.limit:
         tickets = tickets[: args.limit]
 
-    base = await run_mode(False, args.offline, tickets)
+    base = [] if args.meko_only else await run_mode(False, args.offline, tickets)
     meko = await run_mode(True, args.offline, tickets)
 
     OUT.mkdir(exist_ok=True)
-    suffix = "-offline" if args.offline else ""
+    suffix = ("-offline" if args.offline else "") + ("-meko-only" if args.meko_only else "")
     with open(OUT / f"results{suffix}.csv", "w", newline="", encoding="utf-8") as f:
         keys = ["mode", "ticket_id", "lang", "path", "expected_issue", "issue_key", "first_time", "correct",
                 "llm_calls", "input_tokens", "output_tokens", "total_tokens", "latency_s", "reused_memory_id",
