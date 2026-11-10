@@ -23,3 +23,9 @@ def test_typed_question_is_answered_right_away_and_labelled():
     at.button(key="ask_typed").click().run()
     assert not at.exception
     assert any("বার্ধক্য ভাতা" in i.value for i in at.info)
+
+    # Voice is made only on request, for the current answer
+    assert at.session_state["spoken"] is None
+    at.button(key="hear").click().run()
+    assert not at.exception
+    assert at.session_state["spoken"] and at.session_state["spoken_for"] == at.session_state["asked"]
