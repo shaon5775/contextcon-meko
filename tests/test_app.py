@@ -27,6 +27,13 @@ def test_typed_question_is_answered_right_away_and_labelled():
     assert not at.exception
     assert any("বার্ধক্য ভাতা" in i.value for i in at.info)
 
+    # Every answer is a row in the ledger (SQLite stand-in offline), and the caseworker screen shows the SQL audit
+    assert at.session_state["ledger_offline"].audit()["tickets"] == 2
+    at.radio(key="screen").set_value("👩‍💼 Caseworker review").run()
+    assert not at.exception
+    assert any(m.label == "Tickets" and str(m.value) == "2" for m in at.metric)
+    at.radio(key="screen").set_value("🧑‍🌾 Citizen help desk").run()
+
     # Voice is made only on request, for the current answer
     assert at.session_state["spoken"] is None
     at.button(key="hear").click().run()
