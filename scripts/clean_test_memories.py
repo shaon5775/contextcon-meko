@@ -48,13 +48,42 @@ async def list_all(meko, conv: str, promoted: bool) -> list:
         page += 1
 
 
+async def full_meta(meko, conv: str, row: dict, show: bool) -> dict:
+    """memory_get_all rows hide metadata (10 Nov 2026: only id/conversation_id/agent_id/data), so ask Meko for the
+    full record of each memory. Returns {} when the record has no metadata or cannot be read."""
+    if _meta(row):
+        return _meta(row)
+    try:
+        rec = await meko.call("memory_get_by_id", memory_id=row["id"], conversation_id=conv,
+                              agent_id=row.get("agent_id") or AGENT_CASEWORKER)
+    except Exception as e:  # noqa: BLE001
+        if show:
+            print(f"   get_by_id failed for {row['id'][:8]}: {str(e)[:120]}")
+        return {}
+    if show and not getattr(full_meta, "shown", False):
+        print("   SAMPLE get_by_id:", json.dumps(rec)[:700])
+        full_meta.shown = True
+    if isinstance(rec, dict):
+        for cand in (rec, rec.get("memory") if isinstance(rec.get("memory"), dict) else None,
+                     *(rec.get("results") or [] if isinstance(rec.get("results"), list) else [])):
+            if isinstance(cand, dict) and _meta(cand):
+                return _meta(cand)
+    return {}
+
+
 async def main() -> None:
     really = "--yes" in sys.argv
+    show = "--show" in sys.argv
     meko, _, _ = build(offline=False)
     async with meko:
         conv = await meko.conversation_create(AGENT_TRIAGE, "clean test memories")
         for promoted in (False, True):
             rows = await list_all(meko, conv, promoted)
+            metas = [await full_meta(meko, conv, r, show) for r in rows]
+            for r, m in zip(rows, metas):
+                r["metadata"] = m
+            unknown = sum(1 for m in metas if not m)
+            print(f"   (metadata unreadable for {unknown} of {len(rows)} rows; those are KEPT)")
             test = [r for r in rows if str(_meta(r).get("run_tag", "")).startswith(TEST_PREFIXES)]
             label = "promoted store" if promoted else "regular memories"
             print(f"== {label}: {len(rows)} total, {len(test)} test memories")
