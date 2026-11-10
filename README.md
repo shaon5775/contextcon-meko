@@ -49,24 +49,27 @@ Run `python eval/run_eval.py` to fill `eval/results.md`. It compares, on the sam
 - **Baseline:** the full rulebook in every prompt, no memory.
 - **Meko:** retrieval plus shared memory, with first-time vs repeat issues reported separately.
 
-**Latest live run (run 3, 9 Nov 2026):** real Meko + Gemini `gemini-3.5-flash-lite`, 36 tickets, fresh run tag,
+**Latest live run (run 4, 10 Nov 2026):** real Meko + Gemini `gemini-3.5-flash-lite`, 36 tickets, fresh run tag,
 simulated caseworker.
 
 | Run | Tokens | Tokens / ticket | Avg latency (s) | Avg steps | Accuracy |
 |---|---|---|---|---|---|
-| Baseline (full rulebook, no memory) | 151,237 | 4,201 | 2.9 | 2.0 | 97% |
-| Meko (retrieval + shared memory) | **79,410** | **2,206** | 18.4 | 3.0 | 94% |
+| Baseline (full rulebook, no memory) | 150,139 | 4,171 | 4.45 | 2.0 | 94% |
+| Meko (retrieval + shared memory) | **72,430** | **2,012** | 7.43 | 3.0 | **100%** |
 
-| Meko group | Tickets | Tokens / ticket | Accuracy |
-|---|---|---|---|
-| First time an issue is seen | 10 | 2,766 | 100% |
-| Repeat issue | 26 | 1,990 | 92% |
+| Meko group | Tickets | Tokens / ticket | Avg latency (s) | Accuracy |
+|---|---|---|---|---|
+| First time an issue is seen | 10 | 2,748 | 7.7 | 100% |
+| Repeat issue | 26 | 1,729 | 7.33 | 100% |
 
-- **47% fewer tokens** for the same 36 tickets, at almost the same accuracy (94% vs 97%).
-- Repeat tickets cost 28% less than first-time tickets, because the approved fix is reused instead of re-solved.
-- The 2 Meko misses (T25, T26) reused a correct widow-pension fix that left out the death-certificate document.
-- Latency: almost all of Meko's extra time is memory search inside `context_search` (median ~12 s per call on the
-  free tier; knowledge search alone is ~1.3 s, see `scripts/time_search.py`). Rate-limit waits are excluded.
+- **52% fewer tokens** for the same 36 tickets, and **every answer correct** (36/36) vs 94% for the baseline.
+- Repeat tickets cost **37% less** than first-time tickets, because the approved fix is reused instead of re-solved.
+- Run 3's two misses (T25, T26) are fixed: shared fixes now always keep the required documents (e.g. the
+  husband's death certificate). The shorter triage prompt (2,008 → 1,342 characters) won back token savings.
+- Latency: Meko `context_search` averaged **2.6 s** per call in run 4 (it was ~14 s in run 3 on the same free tier).
+  Rate-limit waits are excluded. Baseline misses: T14, T21.
+- **Voice round trip (10 Nov, live):** speak → listen came back correctly in Bengali, Hindi, Tamil and English, each in
+  its own script (`scripts/test_voice.py`).
 - "Correct" = right issue + every expected key fact present (equivalent wordings accepted, `!` = must not appear;
   see `data/tickets.jsonl`). Each expected fact was set to match what the question actually asks, after reading
   every wrong answer by hand. `python eval/rescore.py --show-wrong` prints every answer marked wrong.
@@ -76,6 +79,7 @@ simulated caseworker.
 | 1 | first live run | 75% | 53% | 62% |
 | 2 | triage issue meanings, reused summary = approved fix, synonyms | 78% | 86% | 58% |
 | 3 | same-issue reuse only, de-identified shared fixes, JSON retry, per-question facts | 97% | 94% | 47% |
+| 4 (10 Nov) | shared fixes keep required documents; shorter triage prompt | 94% | **100%** | **52%** |
 
 ## Quick start
 
