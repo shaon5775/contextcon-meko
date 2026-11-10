@@ -326,7 +326,20 @@ class HelpDesk:
                           "issue_key": res.issue_key,
                           "reused_memory_id": res.reused_memory_id, "tokens": res.total_tokens},
             )
+        self._ledger("log_ticket", res, run_tag=self.run_tag)
         return res
+
+    def _ledger(self, method: str, *args, **kwargs) -> None:
+        """Write to the Postgres ledger inside the datapack (saathi/ledger.py) if one is attached. A ledger problem
+        must never stop the citizen's answer, so errors are only noted in the trace."""
+        ledger = getattr(self, "ledger", None)
+        if ledger is None:
+            return
+        try:
+            getattr(ledger, method)(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            if args and hasattr(args[0], "steps"):
+                args[0].steps.append(f"Ledger write failed: {str(e)[:120]}")
 
     async def approve(self, res: TicketResult, caseworker: str = "caseworker", promote: bool = False,
                       edited_fix: str | None = None) -> str | None:
@@ -374,6 +387,7 @@ class HelpDesk:
 
     async def _log_decision(self, res: TicketResult, caseworker: str, decision: str, note: str,
                             memory_id: str | None) -> None:
+        self._ledger("log_review", res, decision, caseworker, memory_id, run_tag=self.run_tag)
         if not self.use_memory or not res.conversation_id:
             return
         # Meko: only the agent that created the conversation (triage) may add turns; the caseworker is in metadata.
