@@ -63,8 +63,10 @@ with speak_tab:
             with st.spinner("Listening..."):
                 st.session_state.heard = voice().listen(audio.getvalue(), audio.type or "audio/wav", hint)
                 st.session_state.heard_key = key
-        heard = st.session_state.get("heard", {})
-        st.text_area("We heard (you can correct it):", value=heard.get("text", ""), key="heard_text", height=80)
+                # A keyed text_area ignores `value=` after its first run, so a 2nd recording never showed up
+                # (owner's live test, 10 Nov 2026). Write the new words into the widget's own state instead.
+                st.session_state.heard_text = st.session_state.heard.get("text", "")
+        st.text_area("We heard (you can correct it):", key="heard_text", height=80)
         question = st.session_state.get("heard_text", "")
 with type_tab:
     typed = st.text_area("Citizen's question (any Indian language, English or Hinglish)", height=90)
