@@ -151,3 +151,64 @@ def test_script_mismatch():
     assert not script_mismatch("আমার PM Kisan-এর টাকা", "bn")
     assert not script_mismatch("মোৰ নাম", "as")        # Assamese uses the Bengali script
     assert not script_mismatch("I am 63", "en")
+
+
+# ---- Caseworker review (week 3) -------------------------------------------------------------------------
+def test_privacy_flags():
+    from saathi.desk import privacy_flags
+    assert privacy_flags("Aadhaar 1234 5678 9012 of the farmer")
+    assert privacy_flags("call her on 9876543210")
+    assert privacy_flags("mail ram@example.com")
+    assert privacy_flags("Call the Ujjwala helpline 1800-266-6696 or 1906 for a gas leak.") == []
+    assert privacy_flags("Apply at the block office with a BPL card; age 60 or more.") == []
+
+
+def test_approve_blocks_personal_data_and_saves_nothing():
+    meko, llm, kb = build(offline=True)
+    desk = HelpDesk(meko, llm, kb)
+    res = run(desk.handle(TICKETS[0]["text"], "T01"))
+    try:
+        run(desk.approve(res, edited_fix="Ask Ram (9876543210) to update the name."))
+        raise AssertionError("should have refused")
+    except ValueError:
+        pass
+    assert meko.memories == []
+
+
+def test_edited_fix_is_what_gets_shared_and_logged():
+    meko, llm, kb = build(offline=True)
+    desk = HelpDesk(meko, llm, kb)
+    res = run(desk.handle(TICKETS[0]["text"], "T01"))
+    mid = run(desk.approve(res, caseworker="Mita", promote=True,
+                           edited_fix="Correct the name on the PM-KISAN portal: Name Correction as per Aadhaar."))
+    mem = meko.memories[0]
+    assert mem["id"] == mid and "Name Correction as per Aadhaar" in mem["memory"] and "Mita" in mem["memory"]
+    assert mem["metadata"]["edited"] is True
+    assert "memory_promote" in meko.calls
+    review = [t for t in meko.turns if (t["metadata"] or {}).get("review")]
+    assert review and review[-1]["metadata"]["review"] == "approved" and review[-1]["metadata"]["memory_id"] == mid
+    assert run(desk.handle(TICKETS[1]["text"], "T02")).path == "reused"
+
+
+def test_rejected_fix_is_logged_but_never_reused():
+    meko, llm, kb = build(offline=True)
+    desk = HelpDesk(meko, llm, kb)
+    res = run(desk.handle(TICKETS[0]["text"], "T01"))
+    run(desk.reject(res, "Mita", "Wrong office mentioned"))
+    assert meko.memories == []
+    assert meko.turns[-1]["metadata"]["review"] == "rejected"
+    assert "Wrong office mentioned" in meko.turns[-1]["assistant"]
+    assert run(desk.handle(TICKETS[1]["text"], "T02")).path == "fresh"
+
+
+def test_promote_failure_keeps_the_fix():
+    meko, llm, kb = build(offline=True)
+
+    async def broken(*a, **k):
+        raise RuntimeError("only the maintainer may promote")
+    meko.memory_promote = broken
+    desk = HelpDesk(meko, llm, kb)
+    res = run(desk.handle(TICKETS[0]["text"], "T01"))
+    assert run(desk.approve(res, promote=True)) is not None
+    assert "maintainer" in desk.last_promote_error
+    assert run(desk.handle(TICKETS[1]["text"], "T02")).path == "reused"
