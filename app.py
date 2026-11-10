@@ -58,9 +58,8 @@ def run_question(q: str) -> None:
     with st.spinner("Saathi is checking shared memory and the official rules..."):
         st.session_state.result = asyncio.run(ask(q))
     st.session_state.asked = q
-    if read_aloud and st.session_state.result.answer:
-        with st.spinner("Preparing the spoken answer..."):
-            st.session_state.spoken = voice().speak(st.session_state.result.answer, st.session_state.result.language)
+    # The voice is made only when the citizen presses "Hear the answer" (owner's test 10 Nov 2026: waiting for the
+    # speech model after every question made the 2nd question look stuck on "Preparing the spoken answer...").
 
 
 # ---- 1. The citizen speaks (or types) -------------------------------------------------------------------
@@ -101,8 +100,17 @@ if res:
                  "baseline": "📚 Baseline (full rulebook)"}[res.path]
         st.subheader(badge)
         st.caption(f"Language: {language_name(res.language)}")
-        if st.session_state.get("spoken"):
-            st.audio(st.session_state.spoken, format="audio/wav")
+        if read_aloud and res.answer:
+            if st.session_state.get("spoken") and st.session_state.get("spoken_for") == st.session_state.get("asked"):
+                st.audio(st.session_state.spoken, format="audio/wav")
+            elif st.button("🔊 Hear the answer", key="hear"):
+                with st.spinner("Making the voice (a few seconds)..."):
+                    st.session_state.spoken = voice().speak(res.answer, res.language)
+                    st.session_state.spoken_for = st.session_state.get("asked")
+                if st.session_state.spoken:
+                    st.audio(st.session_state.spoken, format="audio/wav", autoplay=True)
+                else:
+                    st.warning("The voice service is busy right now. Please read the answer below, or try again.")
         st.write(res.answer)
         st.caption(f"Caseworker summary: {res.summary_en}")
         if res.path == "fresh":
