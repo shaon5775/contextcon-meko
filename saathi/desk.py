@@ -324,19 +324,68 @@ class HelpDesk:
             )
         return res
 
-    async def approve(self, res: TicketResult, caseworker: str = "caseworker", promote: bool = False) -> str | None:
-        """Human-in-the-loop: only an approved, de-identified fix becomes shared memory."""
+    async def approve(self, res: TicketResult, caseworker: str = "caseworker", promote: bool = False,
+                      edited_fix: str | None = None) -> str | None:
+        """Human-in-the-loop: only an approved, de-identified fix becomes shared memory.
+        `edited_fix` = the caseworker's corrected wording (the review screen lets them edit before approving).
+        Raises ValueError if the fix still contains personal data (see `privacy_flags`)."""
         if not self.use_memory or res.path == "reused" or not res.summary_en:
             return None
+        fix = (edited_fix or "").strip() or res.general_fix or res.summary_en
+        flags = privacy_flags(fix)
+        if flags:
+            raise ValueError("Remove personal details first: " + "; ".join(flags))
         scheme_part = res.issue_key.replace("_", " ")
         # Only the de-identified, general version of the fix is shared (falls back to the summary).
-        text = f"VERIFIED FIX [{scheme_part}]: {res.general_fix or res.summary_en} (Approved by {caseworker}.)"
+        text = f"VERIFIED FIX [{scheme_part}]: {fix} (Approved by {caseworker}.)"
         meta = {"type": "verified_fix", "issue_key": res.issue_key, "intent": res.intent,
-                "approved_by": caseworker, "ticket": res.ticket_id, "sources": res.sources[:5]}
+                "approved_by": caseworker, "ticket": res.ticket_id, "sources": res.sources[:5],
+                "edited": bool((edited_fix or "").strip()) and fix != (res.general_fix or res.summary_en)}
         if self.run_tag:
             meta["run_tag"] = self.run_tag
         added = await self.meko.memory_add(text, res.conversation_id, AGENT_CASEWORKER, meta)
         mem_ids = [r.get("id") for r in _as_list(added) if r.get("id")]
+        self.last_promote_error = None
         if promote and mem_ids:
-            await self.meko.memory_promote(mem_ids, res.conversation_id, AGENT_CASEWORKER)
+            try:  # promote = move the fix to the shared learnings layer (one-way in Meko)
+                await self.meko.memory_promote(mem_ids, res.conversation_id, AGENT_CASEWORKER)
+            except Exception as e:  # the fix is already saved; promoting is a bonus, so never lose it
+                self.last_promote_error = str(e)[:300]
+        await self._log_decision(res, caseworker, "approved", fix, mem_ids[0] if mem_ids else None)
         return mem_ids[0] if mem_ids else None
+
+    async def reject(self, res: TicketResult, caseworker: str, reason: str) -> None:
+        """The caseworker says the answer is wrong: nothing is saved to memory, but the decision and the reason
+        go into the conversation trace, so the audit shows why this fix was never reused."""
+        await self._log_decision(res, caseworker, "rejected", reason.strip() or "(no reason given)", None)
+
+    async def _log_decision(self, res: TicketResult, caseworker: str, decision: str, note: str,
+                            memory_id: str | None) -> None:
+        if not self.use_memory or not res.conversation_id:
+            return
+        # Meko: only the agent that created the conversation (triage) may add turns; the caseworker is in metadata.
+        await self.meko.add_turn(
+            res.conversation_id, AGENT_TRIAGE, user=f"[caseworker review by {caseworker}]",
+            assistant=f"{decision.upper()}: {note}", reasoning=f"Human review: {decision}",
+            metadata={"ticket": res.ticket_id, "review": decision, "caseworker": caseworker,
+                      "memory_id": memory_id, "issue_key": res.issue_key})
+
+
+_AADHAAR = re.compile(r"(?<!\d)\d{4}[\s-]?\d{4}[\s-]?\d{4}(?!\d)")
+_PHONE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
+_HELPLINES = {"14438", "14428", "1906", "18002666696", "1800-266-6696", "155261", "011-24300606"}
+
+
+def privacy_flags(text: str) -> list[str]:
+    """Personal data that must never reach shared memory (Aadhaar-like 12-digit numbers, mobile numbers,
+    e-mail addresses). Official helpline numbers are allowed."""
+    flags = []
+    if _AADHAAR.search(text):
+        flags.append("a 12-digit number (looks like Aadhaar)")
+    phones = [p for p in _PHONE.findall(text) if re.sub(r"\D", "", p) not in _HELPLINES]
+    if phones:
+        flags.append("a mobile number")
+    if _EMAIL.search(text):
+        flags.append("an e-mail address")
+    return flags
