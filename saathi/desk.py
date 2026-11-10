@@ -32,19 +32,32 @@ ISSUE_MEANING = {
     "other": "anything else",
 }
 ISSUE_KEYS = list(ISSUE_MEANING)
-_ISSUE_LINES = "\n".join(f"    {k}: {v}" for k, v in ISSUE_MEANING.items())
+# Short labels for the triage prompt only (saves tokens on every ticket). The full ISSUE_MEANING above is
+# still used to build the Meko search query, where the extra words help retrieval.
+ISSUE_SHORT = {
+    "kisan_name_mismatch": "PM-KISAN stopped, name not matching Aadhaar",
+    "kisan_ekyc_otp": "PM-KISAN eKYC OTP not coming (old mobile)",
+    "kisan_aadhaar_seeding": "PM-KISAN payment failed: bank not Aadhaar-seeded / NPCI / DBT",
+    "vayvandana_apply": "Ayushman Vay Vandana / Ayushman card, age 70+",
+    "vayvandana_cghs": "70+ already on CGHS/ECHS/other govt health scheme",
+    "oldage_pension_eligibility": "old-age pension (NSAP, IGNOAPS, budhapa, bardhakya bhata)",
+    "widow_pension_eligibility": "widow pension (IGNWPS, bidhoba bhata)",
+    "ujjwala_existing_lpg": "PM Ujjwala, household already has LPG",
+    "ujjwala_migrant_docs": "PM Ujjwala, migrant without local address proof",
+    "wb_women_support_change": "WB Lakshmir / Annapurna Bhandar for women",
+    "other": "anything else",
+}
+_ISSUE_LINES = "\n".join(f"    {k}: {ISSUE_SHORT[k]}" for k in ISSUE_KEYS)
 
 TRIAGE_SYSTEM = f"""[agent:triage] You are the triage agent of Yojana Saathi, an Indian government-scheme help desk.
-Read the citizen's question (it may be in any Indian language, English or Hinglish, often typed from speech).
-Return ONLY a JSON object with keys:
-  scheme      - the scheme name in English (or "unknown")
-  issue_key   - exactly one of these keys (pick the closest; use "other" only if none fits):
+Question may be in any Indian language, English or Hinglish. Return ONLY JSON with keys:
+  scheme: scheme name in English or "unknown"
+  issue_key: the closest of (use "other" only if none fits):
 {_ISSUE_LINES}
-  intent      - "eligibility" (which scheme / can I get it / how to apply) or "problem" (something failed or stopped)
-  language    - the citizen's language as a short code: bn, hi, en, hinglish, ta, te, mr, gu, kn, ml, or, pa,
-                as, ur (or another ISO 639-1 code)
-  summary_en  - one short English sentence describing the need, with no names, phone or Aadhaar numbers
-  profile     - object with any of: age, gender, state, bpl (true/false), occupation
+  intent: "eligibility" (can I get it / how to apply) or "problem" (failed or stopped)
+  language: short code (bn, hi, en, hinglish, ta, te, mr, gu, kn, ml, or, pa, as, ur, ...)
+  summary_en: one short English sentence, no names or ID numbers
+  profile: any of age, gender, state, bpl, occupation
 """
 
 SPECIALIST_SYSTEM = """[agent:{agent}] You are the {role} agent of Yojana Saathi, an Indian government-scheme help desk.
@@ -59,6 +72,9 @@ Return ONLY a JSON object with keys:
   general_fix_en - the fix written for ANYONE with this problem, in English, with no personal details
                 (no ages of this person, no relations like mother/father, no names, places or numbers that
                 identify them). Keep the rule itself, e.g. "Anyone aged 70 or above is eligible ...".
+                ALWAYS keep every required document (e.g. death certificate of the husband, Aadhaar, bank
+                passbook, BPL card, age proof), the age limits, the amounts and where to apply, so that a
+                later citizen gets the complete fix.
   issue_key   - the issue you solved (from triage)
   sources     - list of document names or memory ids you used
   confidence  - number 0..1
