@@ -38,7 +38,7 @@ async def main() -> int:
         edited = (first.general_fix or first.summary_en) + " Confirm the change on the official PM-KISAN portal."
         mem_id = await desk.approve(first, caseworker="live-test", promote=True, edited_fix=edited)
         print(f"[2 approve] memory_id={mem_id}")
-        print(f"[2 promote] {'OK' if not desk.last_promote_error else 'FAILED: ' + desk.last_promote_error}")
+        print(f"[2 promote] {'OK, promoted copy ' + str(desk.last_promoted_id) if not desk.last_promote_error else 'FAILED: ' + desk.last_promote_error}")
         ok &= bool(mem_id)
 
         # 3. Same issue in Hindi -> should reuse the approved fix
