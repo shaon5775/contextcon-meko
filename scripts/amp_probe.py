@@ -23,10 +23,21 @@ async def main() -> None:
     async with meko:
         tools = (await meko._session.list_tools()).tools
         print("ALL TOOLS:", ", ".join(sorted(t.name for t in tools)))
-        for t in tools:
-            if any(w in t.name.lower() for w in WORDS):
-                print(f"\n== {t.name}\n   {(t.description or '').strip()[:400]}")
-                print("   inputs:", json.dumps(t.inputSchema)[:900])
+        amp = {t.name: {"description": t.description, "inputs": t.inputSchema}
+               for t in tools if any(w in t.name.lower() for w in WORDS)}
+        out = Path(__file__).resolve().parent.parent / "eval" / "amp_tools.json"
+        out.write_text(json.dumps(amp, indent=1), encoding="utf-8")
+        print(f"(full schemas saved to {out})")
+        for name in ("amp_core_budget", "amp_cluster_create", "amp_compute_create", "amp_compute_get"):
+            if name not in amp:
+                continue
+            props = (amp[name]["inputs"] or {}).get("properties", {})
+            req = (amp[name]["inputs"] or {}).get("required", [])
+            print(f"\n== {name}  required={req}")
+            for p, spec in props.items():
+                print(f"   - {p}: {spec.get('type', '')} {str(spec.get('enum', ''))} :: {str(spec.get('description', ''))[:160]}")
+            desc = (amp[name]["description"] or "").replace("\n", " ")
+            print("   DESC:", desc[:1500])
         names = {t.name for t in tools}
         for name in SAFE_READS:
             if name in names:
