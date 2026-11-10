@@ -27,7 +27,26 @@ Bengali -> বাংলা লিপি, Hindi/Marathi -> देवनागर�
 Kannada -> ಕನ್ನಡ, Malayalam -> മലയാളം, Odia -> ଓଡ଼ିଆ, Punjabi -> ਗੁਰਮੁਖੀ, Urdu -> اردو.
 Only English, or Hindi mixed with English words (Hinglish), may be written in Latin letters.
 English words inside an Indian sentence (PM Kisan, Aadhaar, OTP) may stay in Latin letters.
+Write the letters themselves (e.g. আমার, मेरे) - NEVER \\u escape codes.
 {hint}Return ONLY JSON: {{"text": "...", "language": "<ISO 639-1 code, or hinglish>"}}"""
+
+
+def parse_heard(raw: str) -> dict:
+    """Read the listen reply. Gemini sometimes escapes Indian letters as \\uXXXX and breaks one escape, which makes
+    the JSON invalid (seen live for Bengali on 10 Nov 2026). Then pull text/language out leniently instead of
+    showing the raw JSON to the citizen."""
+    raw = raw or "{}"
+    try:
+        out = json.loads(re.search(r"\{.*\}", raw, re.S).group(0))
+        return {"text": str(out.get("text", "")).strip(), "language": str(out.get("language", "")).strip().lower()}
+    except (AttributeError, json.JSONDecodeError):
+        pass
+    m = re.search(r'"text"\s*:\s*"(.*)"\s*,\s*"language"\s*:\s*"([^"]*)"', raw, re.S)
+    if not m:
+        return {"text": raw.strip(), "language": ""}
+    text = re.sub(r"\\u([0-9a-fA-F]{4})", lambda g: chr(int(g.group(1), 16)), m.group(1))
+    text = re.sub(r"\\u[0-9a-fA-F]{0,3}", "", text).replace('\\"', '"').replace("\\n", " ")
+    return {"text": re.sub(r"\s+", " ", text).strip(), "language": m.group(2).strip().lower()}
 
 
 def _retry(call, tries: int = 5):
@@ -81,12 +100,7 @@ class GeminiVoice:
             contents=[t.Part.from_bytes(data=audio, mime_type=mime_type), LISTEN_PROMPT.format(hint=hint)],
             config=t.GenerateContentConfig(temperature=0, response_mime_type="application/json"),
         ))
-        raw = resp.text or "{}"
-        try:
-            out = json.loads(re.search(r"\{.*\}", raw, re.S).group(0))
-        except (AttributeError, json.JSONDecodeError):
-            out = {"text": raw.strip(), "language": ""}
-        return {"text": str(out.get("text", "")).strip(), "language": str(out.get("language", "")).strip().lower()}
+        return parse_heard(resp.text or "{}")
 
     def speak(self, text: str, language: str = "") -> bytes | None:
         """Read the answer aloud. Returns WAV bytes, or None if the speech model is not available."""
