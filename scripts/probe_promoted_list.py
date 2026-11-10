@@ -21,10 +21,10 @@ async def main() -> None:
         res = await meko.call("memory_get_all", conversation_id=conv, agent_id=AGENT_CASEWORKER, promoted=True,
                               page_size=100)
         print("promoted reply keys:", sorted(res) if isinstance(res, dict) else type(res))
-        rows = res.get("results") or res.get("memories") or res.get("items") or [] if isinstance(res, dict) else res
+        rows = (res.get("promoted_memories") or []) if isinstance(res, dict) else res
         print(f"promoted rows: {len(rows)}  total={res.get('total') if isinstance(res, dict) else '?'}")
         for r in rows[:30]:
-            print("  ", json.dumps({k: r.get(k) for k in ("id", "agent_id", "metadata", "promoted_from", "source_memory_id")})[:400])
+            print("  ", json.dumps(r)[:700])
             print("     text:", str(r.get("memory") or r.get("text"))[:120])
         for mid in ids:
             for agent in (AGENT_CASEWORKER, None):
