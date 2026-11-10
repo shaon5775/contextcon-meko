@@ -37,6 +37,33 @@ Citizen speaks 🎤 or types (Bengali, Hindi, Tamil, ... any Indian language)
 | Eligibility / Resolver | `knowledgebase_search` over official scheme rules |
 | Caseworker review | `memory_add`, `memory_promote`: only approved, de-identified fixes are shared |
 | Audit | `track_token_usage`, decision traces, `artifact_put` |
+| Ledger | `amp_core_budget`, `amp_cluster_list/create`, `amp_branch_list`, `amp_compute_list/create`: a real Postgres database inside the datapack |
+
+### Postgres inside the datapack
+
+Memory tells the agents *what* the approved fix is. A help desk also needs hard numbers: how many tickets, how
+many were reused, what each one cost, who approved what. Those live in a real Postgres database that Meko runs
+**inside the same datapack** (AMP).
+
+- `saathi/ledger.py` finds the cluster `saathi-ledger` (or creates it with `amp_cluster_create`, after checking
+  `amp_core_budget`), finds the `main` branch and its writer endpoint, and connects with `psycopg`. The endpoint is
+  `ingress_external` with an allow-list of the caller's own IP (`/32`); if the IP changed (a new Colab runtime), it
+  makes a fresh writer endpoint. The database password is derived from the Meko key and is never printed.
+- Two tables: `tickets` (one row per answer: language, issue, fresh/reused, tokens, LLM calls, latency, which
+  approved memory was reused, conversation id) and `reviews` (one row per caseworker approve/reject, with the new
+  memory id).
+- The desk writes a row after every answer and every review. If the database is unreachable the answer still goes
+  out; the step list just notes "Ledger write failed".
+- The **audit report is plain SQL** (`AUDIT_SQL` in `saathi/ledger.py`): reuse rate, average tokens fresh vs
+  reused, approvals, and a per-issue table. The caseworker screen shows it live ("📊 Audit from Postgres") and can
+  save it to Meko with `artifact_put`; `eval/run_eval.py` saves it as `audit-report.md` after every run.
+- Offline, the same SQL runs on SQLite, so the tests need no keys.
+
+```bash
+python scripts/ledger.py --create   # once: create the cluster + writer endpoint
+python scripts/ledger.py            # live check: 2 tickets + 1 approval → SQL audit → artifact_put
+python scripts/ledger.py --audit    # print the audit report only
+```
 
 Schemes covered so far: PM-KISAN, Ayushman Vay Vandana (70+), NSAP old-age and widow pensions, PM Ujjwala,
 and West Bengal's women support (Lakshmir Bhandar → Annapurna Bhandar, a 2026 rule change).
@@ -80,6 +107,18 @@ simulated caseworker.
 | 2 | triage issue meanings, reused summary = approved fix, synonyms | 78% | 86% | 58% |
 | 3 | same-issue reuse only, de-identified shared fixes, JSON retry, per-question facts | 97% | 94% | 47% |
 | 4 (10 Nov) | shared fixes keep required documents; shorter triage prompt | 94% | **100%** | **52%** |
+| 5 (10 Nov) | Meko half only, with the Postgres ledger on (`--meko-only`) | (run 4) | **100%** | **63%** vs run 4 baseline |
+
+**Run 5 (10 Nov 2026, live, Postgres ledger on):** 36/36 correct, 55,270 tokens (1,535 per ticket). First-time
+issues cost 2,731 tokens, repeats 1,075 (**61% less**), and **26 of 26** repeats reused an approved fix. The baseline
+was not re-run (Gemini's free tier was slow that evening), so the 63% compares with run 4's baseline (150,139).
+The SQL audit from the ledger (`eval/audit-report.md`, also stored in Meko with `artifact_put`):
+
+| Ledger audit | Value |
+|---|---|
+| Tickets / reused / fresh | 36 / 26 / 10 (reuse rate 72%) |
+| Average tokens, fresh vs reused | 2,731 vs 1,075 |
+| Caseworker decisions | 10 approved, 0 rejected |
 
 ## Quick start
 
@@ -109,7 +148,7 @@ python eval/run_eval.py     # evaluation
 
 ### No keys? Try it offline
 ```bash
-pytest -q                          # 5 tests, fake Meko + mock model
+pytest -q                          # 26 tests, fake Meko + mock model
 python eval/run_eval.py --offline  # checks the whole pipeline without network
 streamlit run app.py               # then switch on "Offline demo" in the sidebar
 ```
@@ -121,6 +160,8 @@ Keys: Meko → Settings → Security → API keys. Gemini → https://aistudio.g
 saathi/meko.py      Meko MCP client (+ offline fake)
 saathi/llm.py       Gemini model (+ mock model for tests)
 saathi/desk.py      the agents and the help-desk flow
+saathi/ledger.py    Postgres ledger inside the datapack (AMP) + SQL audit (SQLite offline)
+saathi/voice.py     speak / listen with Gemini
 app.py              Streamlit demo
 eval/run_eval.py    baseline vs Meko evaluation
 knowledge/          official scheme rules (uploaded to Meko's knowledge base)
