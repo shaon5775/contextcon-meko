@@ -55,6 +55,20 @@ async def run_mode(use_memory: bool, offline: bool, tickets: list[dict]) -> list
         if run_tag:
             print(f"Meko run tag: {run_tag} (only fixes approved in this run are reused)")
         desk = HelpDesk(meko, llm, knowledge, use_memory=use_memory, run_tag=run_tag)
+        if use_memory:   # every ticket + approval also becomes a row in the Postgres ledger inside the datapack
+            try:
+                if offline:
+                    from saathi.ledger import SqliteLedger
+                    desk.ledger = SqliteLedger()
+                else:
+                    from saathi.config import Settings
+                    from saathi.desk import AGENT_TRIAGE
+                    from saathi.ledger import PgLedger
+                    lconv = await meko.conversation_create(AGENT_TRIAGE, "eval ledger")
+                    desk.ledger = await PgLedger.connect(meko, lconv, Settings().meko_api_key)
+                print("Postgres ledger: connected")
+            except Exception as e:  # noqa: BLE001 - the evaluation still runs without it
+                print(f"Postgres ledger: not used ({str(e)[:120]})")
         seen: set[str] = set()
         for t in tickets:
             res = await desk.handle(t["text"], t["id"])
@@ -78,6 +92,12 @@ async def run_mode(use_memory: bool, offline: bool, tickets: list[dict]) -> list
             conv = rows[-1]["conversation_id"] if rows else None
             if conv:
                 await meko.artifact_put("meko-run-summary.md", report, "text/markdown", conv, AGENT_CASEWORKER)
+            if getattr(desk, "ledger", None) is not None and conv:
+                from saathi.ledger import audit_markdown
+                audit = audit_markdown(desk.ledger.audit(run_tag=run_tag))
+                print(audit)
+                await meko.artifact_put("audit-report.md", audit.encode(), "text/markdown", conv, AGENT_CASEWORKER)
+                (ROOT / "eval" / "audit-report.md").write_text(audit, encoding="utf-8")
     return rows
 
 
