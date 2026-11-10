@@ -62,6 +62,11 @@ async def main() -> None:
             for r in test:
                 tags[_meta(r)["run_tag"]] = tags.get(_meta(r)["run_tag"], 0) + 1
             print("   by run tag:", tags)
+            if "--show" in sys.argv:
+                fixes = [r for r in rows if "VERIFIED FIX" in json.dumps(r)]
+                print(f"   rows mentioning VERIFIED FIX: {len(fixes)}")
+                for r in (fixes or rows)[:2]:
+                    print("   SAMPLE:", json.dumps(r)[:900])
             if not really:
                 continue
             ok = fail = 0
