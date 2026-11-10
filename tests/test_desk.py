@@ -212,3 +212,16 @@ def test_promote_failure_keeps_the_fix():
     assert run(desk.approve(res, promote=True)) is not None
     assert "maintainer" in desk.last_promote_error
     assert run(desk.handle(TICKETS[1]["text"], "T02")).path == "reused"
+
+
+def test_promote_keeps_a_searchable_copy():
+    """Live 10 Nov: Meko's memory_promote moves the memory out of search. The approved fix must stay reusable."""
+    meko, llm, kb = build(offline=True)
+    desk = HelpDesk(meko, llm, kb)
+    res = run(desk.handle(TICKETS[0]["text"], "T01"))
+    mid = run(desk.approve(res, promote=True))
+    assert desk.last_promoted_id and desk.last_promoted_id != mid
+    assert [m["id"] for m in meko.promoted] == [desk.last_promoted_id]
+    assert [m["id"] for m in meko.memories] == [mid]
+    again = run(desk.handle(TICKETS[1]["text"], "T02"))
+    assert again.path == "reused" and again.reused_memory_id == mid
