@@ -35,8 +35,8 @@ async def main() -> None:
         buckets = ctx.get("results", ctx) if isinstance(ctx, dict) else {}
         print("context_search top-level keys:", sorted(ctx) if isinstance(ctx, dict) else type(ctx))
         print("bucket keys:", sorted(buckets) if isinstance(buckets, dict) else type(buckets))
-        show("context_search memory", _as_list(buckets.get("memory")))
-        for scope in (None, "shared", "all"):
+        print("context_search memory ids:", [m.get("id")[:8] for m in _as_list(buckets.get("memory"))])
+        for scope in ():
             try:
                 args = {"query": QUERY, "conversation_id": conv, "agent_id": AGENT_TRIAGE, "limit": 10}
                 if scope:
@@ -45,16 +45,21 @@ async def main() -> None:
                 show(f"memory_search scope={scope}", _as_list(res))
             except Exception as e:  # noqa: BLE001
                 print(f"== memory_search scope={scope}: ERROR {str(e)[:300]}")
-        if target:
-            for tool in ("memory_get",):
-                try:
-                    print(f"== {tool} {target}:", json.dumps(await meko.call(tool, memory_id=target))[:600])
-                except Exception as e:  # noqa: BLE001
-                    print(f"== {tool}: ERROR {str(e)[:300]}")
         tools = await meko._session.list_tools()
         for t in tools.tools:
-            if "memory" in t.name or "context" in t.name:
-                print(f"-- tool {t.name}: {json.dumps(t.inputSchema.get('properties', {}))[:500]}")
+            if any(w in t.name for w in ("memory", "context", "conversation_add")):
+                schema = getattr(t, "inputSchema", None) or getattr(t, "input_schema", None) or {}
+                print(f"-- tool {t.name}: {json.dumps(schema.get('properties', {}))[:1500]}")
+        big = await meko.call("memory_search", query=QUERY, conversation_id=conv, agent_id=AGENT_TRIAGE, limit=50)
+        items = _as_list(big)
+        print(f"== memory_search limit=50: {len(items)} items")
+        for rank, m in enumerate(items, 1):
+            meta = m.get("metadata") or {}
+            if isinstance(meta, str):
+                meta = json.loads(meta)
+            if meta.get("type") == "verified_fix" or m.get("id") == target:
+                print(f"  rank {rank} id={m.get('id')} score={m.get('score'):.3f} tag={meta.get('run_tag')} "
+                      f"issue={meta.get('issue_key')}")
 
 
 if __name__ == "__main__":
