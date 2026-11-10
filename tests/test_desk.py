@@ -129,3 +129,15 @@ def test_voice_offline_round_trip():
     with wave.open(io.BytesIO(v.speak(res.answer, res.language))) as w:
         assert w.getframerate() == 24000
     assert "http" not in speakable("Visit https://pmkisan.gov.in **now**")
+
+
+def test_parse_heard_handles_broken_escapes():
+    from saathi.voice import parse_heard
+    # Real live reply (10 Nov 2026): Bengali letters as \u escapes, one escape cut off -> invalid JSON
+    raw = ('{"text": "\\u0986\\u09ae\\u09be\\u09b0 PM Kisan-\\u09b0 \\u09a4\\u09be\\u0995\\u09be '
+           'Aadhaar-\\u09c7\\u0 \\u09a8\\u09be\\u09ae", "language": "bn"}')
+    out = parse_heard(raw)
+    assert out["language"] == "bn"
+    assert out["text"].startswith("আমার PM Kisan-র") and "\\u" not in out["text"]
+    assert parse_heard('{"text": "मेरे दादा जी", "language": "HI"}') == {"text": "मेरे दादा जी", "language": "hi"}
+    assert parse_heard("no json here")["text"] == "no json here"
