@@ -16,7 +16,7 @@ AGENT_TRIAGE = "yojana_saathi:triage"
 AGENT_ELIGIBILITY = "yojana_saathi:eligibility"
 AGENT_RESOLVER = "yojana_saathi:resolver"
 AGENT_CASEWORKER = "yojana_saathi:caseworker"
-MEMORY_SEARCH_LIMIT = 20
+MEMORY_SEARCH_LIMIT = 50
 
 ISSUE_MEANING = {
     "kisan_name_mismatch": "PM-KISAN money stopped because the name does not match Aadhaar (spelling, name mismatch)",
@@ -271,7 +271,7 @@ class HelpDesk:
             meaning = ISSUE_MEANING.get(res.issue_key, "")
             query = f"{tri.get('scheme', '')}: {meaning}. {tri.get('summary_en', text)}"
             # Live 10 Nov: Meko auto-creates memories from every conversation turn; after many runs they filled the
-            # top 8 places and pushed the approved fixes out of a top-5 search. So fetch 20 memories (the limit is
+            # top 8 places and pushed the approved fixes out of a top-5 search. So fetch 50 memories (the limit is
             # per source; only the 5 best knowledge chunks are used below).
             ctx = await self.meko.context_search(query, res.conversation_id, AGENT_TRIAGE, limit=MEMORY_SEARCH_LIMIT)
             buckets = ctx.get("results", ctx) if isinstance(ctx, dict) else {}
