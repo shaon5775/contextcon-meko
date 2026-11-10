@@ -29,17 +29,17 @@ TABLES = [
         issue_key TEXT, decision TEXT, caseworker TEXT, memory_id TEXT, run_tag TEXT)""",
 ]
 
-AUDIT_SQL = {
-    "tickets": "SELECT COUNT(*) FROM tickets WHERE mode = 'meko'",
-    "reused": "SELECT COUNT(*) FROM tickets WHERE mode = 'meko' AND path = 'reused'",
-    "fresh": "SELECT COUNT(*) FROM tickets WHERE mode = 'meko' AND path = 'fresh'",
-    "avg_tokens_fresh": "SELECT AVG(tokens) FROM tickets WHERE mode = 'meko' AND path = 'fresh'",
-    "avg_tokens_reused": "SELECT AVG(tokens) FROM tickets WHERE mode = 'meko' AND path = 'reused'",
-    "approved": "SELECT COUNT(*) FROM reviews WHERE decision = 'approved'",
-    "rejected": "SELECT COUNT(*) FROM reviews WHERE decision = 'rejected'",
+AUDIT_SQL = {   # {f} = optional "AND run_tag = <placeholder>" filter
+    "tickets": "SELECT COUNT(*) FROM tickets WHERE mode = 'meko'{f}",
+    "reused": "SELECT COUNT(*) FROM tickets WHERE mode = 'meko' AND path = 'reused'{f}",
+    "fresh": "SELECT COUNT(*) FROM tickets WHERE mode = 'meko' AND path = 'fresh'{f}",
+    "avg_tokens_fresh": "SELECT AVG(tokens) FROM tickets WHERE mode = 'meko' AND path = 'fresh'{f}",
+    "avg_tokens_reused": "SELECT AVG(tokens) FROM tickets WHERE mode = 'meko' AND path = 'reused'{f}",
+    "approved": "SELECT COUNT(*) FROM reviews WHERE decision = 'approved'{f}",
+    "rejected": "SELECT COUNT(*) FROM reviews WHERE decision = 'rejected'{f}",
 }
 BY_ISSUE_SQL = ("SELECT issue_key, COUNT(*), SUM(CASE WHEN path = 'reused' THEN 1 ELSE 0 END) FROM tickets "
-                "WHERE mode = 'meko' GROUP BY issue_key ORDER BY COUNT(*) DESC")
+                "WHERE mode = 'meko'{f} GROUP BY issue_key ORDER BY COUNT(*) DESC")
 
 
 def derived_password(api_key: str) -> str:
@@ -119,14 +119,17 @@ class _Base:
             "ticket_id": res.ticket_id, "conversation_id": res.conversation_id, "issue_key": res.issue_key,
             "decision": decision, "caseworker": caseworker, "memory_id": memory_id, "run_tag": run_tag})
 
-    def audit(self) -> dict:
+    def audit(self, run_tag: str | None = None) -> dict:
+        """Totals straight from SQL. run_tag = only the rows of one evaluation run."""
         cur = self.conn.cursor()
+        f = f" AND run_tag = {self.ph}" if run_tag else ""
+        params = [run_tag] if run_tag else []
         out = {}
         for name, sql in AUDIT_SQL.items():
-            cur.execute(sql)
+            cur.execute(sql.format(f=f), params)
             v = cur.fetchone()[0]
             out[name] = round(float(v), 1) if isinstance(v, float) or (v is not None and not isinstance(v, int)) else (v or 0)
-        cur.execute(BY_ISSUE_SQL)
+        cur.execute(BY_ISSUE_SQL.format(f=f), params)
         out["by_issue"] = [{"issue_key": r[0], "tickets": int(r[1]), "reused": int(r[2] or 0)} for r in cur.fetchall()]
         out["reuse_rate_pct"] = round(100 * out["reused"] / out["tickets"]) if out["tickets"] else 0
         return out
