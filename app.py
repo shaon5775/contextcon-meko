@@ -49,39 +49,52 @@ async def approve(res, caseworker: str):
         return await desk.approve(res, caseworker=caseworker)
 
 
+def run_question(q: str) -> None:
+    """Answer one question now and remember which question the answer belongs to."""
+    q = (q or "").strip()
+    if not q:
+        return
+    st.session_state.result, st.session_state.spoken = None, None
+    with st.spinner("Saathi is checking shared memory and the official rules..."):
+        st.session_state.result = asyncio.run(ask(q))
+    st.session_state.asked = q
+    if read_aloud and st.session_state.result.answer:
+        with st.spinner("Preparing the spoken answer..."):
+            st.session_state.spoken = voice().speak(st.session_state.result.answer, st.session_state.result.language)
+
+
 # ---- 1. The citizen speaks (or types) -------------------------------------------------------------------
+# Voice flow (owner's test, 10 Nov 2026): the old flow showed each answer one step late. Now each tab has its own
+# "Ask Saathi" button that answers exactly the text shown above it, in the same click, and the answer is labelled
+# with its question. Tap the mic, speak, tap again -> the words appear -> press Ask Saathi.
 speak_tab, type_tab = st.tabs(["🎤 Speak", "⌨️ Type"])
-question = ""
 with speak_tab:
     codes = ["", "bn", "hi", "en", "ta", "te", "mr", "gu", "kn", "ml", "or", "pa", "as", "ur"]
     hint = st.selectbox("Your language (optional)", codes,
                         format_func=lambda c: "Detect automatically" if not c else language_name(c))
-    audio = st.audio_input("Press the microphone and say your problem in your own language")
+    st.markdown("**1.** Tap the 🎤 microphone and say your problem. **2.** Tap it again to stop. "
+                "**3.** Check the words, then press **Ask Saathi**.")
+    audio = st.audio_input("🎤 Tap to speak, tap again to stop")
     if audio is not None:
         key = (hash(audio.getvalue()), hint)
-        if st.session_state.get("heard_key") != key:
+        if st.session_state.get("heard_key") != key:          # a NEW recording: write down what was said
             with st.spinner("Listening..."):
-                st.session_state.heard = voice().listen(audio.getvalue(), audio.type or "audio/wav", hint)
-                st.session_state.heard_key = key
-                # A keyed text_area ignores `value=` after its first run, so a 2nd recording never showed up
-                # (owner's live test, 10 Nov 2026). Write the new words into the widget's own state instead.
-                st.session_state.heard_text = st.session_state.heard.get("text", "")
+                heard = voice().listen(audio.getvalue(), audio.type or "audio/wav", hint)
+            st.session_state.heard_key = key
+            # A keyed text_area ignores `value=` after its first run, so write the words into its state.
+            st.session_state.heard_text = heard.get("text", "")
         st.text_area("We heard (you can correct it):", key="heard_text", height=80)
-        question = st.session_state.get("heard_text", "")
+        if st.button("Ask Saathi", type="primary", key="ask_voice"):
+            run_question(st.session_state.get("heard_text", ""))
 with type_tab:
-    typed = st.text_area("Citizen's question (any Indian language, English or Hinglish)", height=90)
-    question = question or typed
-
-if st.button("Ask Saathi", type="primary") and question.strip():
-    with st.spinner("Agents are checking shared memory and official rules..."):
-        st.session_state.result = asyncio.run(ask(question.strip()))
-        st.session_state.spoken = None
-        if read_aloud and st.session_state.result.answer:
-            st.session_state.spoken = voice().speak(st.session_state.result.answer, st.session_state.result.language)
+    typed = st.text_area("Citizen's question (any Indian language, English or Hinglish)", height=90, key="typed")
+    if st.button("Ask Saathi", type="primary", key="ask_typed"):
+        run_question(typed)
 
 # ---- 2. The answer, read aloud, with the reasons -----------------------------------------------------------
 res = st.session_state.get("result")
 if res:
+    st.info(f"**Question:** {st.session_state.get('asked', '')}")
     left, right = st.columns([3, 2])
     with left:
         badge = {"reused": "♻️ Reused an approved fix", "fresh": "🆕 Solved fresh from official rules",
