@@ -105,8 +105,9 @@ class GeminiVoice:
     def speak(self, text: str, language: str = "") -> bytes | None:
         """Read the answer aloud. Returns WAV bytes, or None if the speech model is not available."""
         t = self.types
-        lang = LANGUAGE_NAMES.get(language, "")
-        prompt = (f"Read this aloud slowly and kindly{', in ' + lang if lang else ''}:\n" if lang else "") + speakable(text)
+        # Only the answer itself: an instruction like "Read this aloud slowly..." was spoken out loud in the live
+        # English test (10 Nov 2026). The speech model picks the language from the text.
+        prompt = speakable(text)
         try:
             resp = _retry(lambda: self.client.models.generate_content(
                 model=SPEAK_MODEL, contents=prompt,
