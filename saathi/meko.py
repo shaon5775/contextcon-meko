@@ -150,6 +150,7 @@ class FakeMeko:
     datapack_id: str = "offline"
     knowledge: dict[str, str] = field(default_factory=dict)
     memories: list[dict] = field(default_factory=list)
+    promoted: list[dict] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     token_log: list[dict] = field(default_factory=list)
     turns: list[dict] = field(default_factory=list)
@@ -195,7 +196,11 @@ class FakeMeko:
         return {"results": [{"id": mid, "memory": text, "event": "ADD"}]}
 
     async def memory_promote(self, memory_ids, conversation_id, agent_id):
+        # Same as live Meko (checked 10 Nov 2026): promoting MOVES the memory out of the searchable store.
         self.calls.append("memory_promote")
+        moved = [m for m in self.memories if m["id"] in memory_ids]
+        self.memories = [m for m in self.memories if m["id"] not in memory_ids]
+        self.promoted.extend(moved)
         return {"promoted": memory_ids}
 
     async def track_tokens(self, conversation_id, name, model, input_tokens, output_tokens):

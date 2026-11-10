@@ -16,6 +16,7 @@ AGENT_TRIAGE = "yojana_saathi:triage"
 AGENT_ELIGIBILITY = "yojana_saathi:eligibility"
 AGENT_RESOLVER = "yojana_saathi:resolver"
 AGENT_CASEWORKER = "yojana_saathi:caseworker"
+MEMORY_SEARCH_LIMIT = 20
 
 ISSUE_MEANING = {
     "kisan_name_mismatch": "PM-KISAN money stopped because the name does not match Aadhaar (spelling, name mismatch)",
@@ -269,7 +270,10 @@ class HelpDesk:
         if self.use_memory:
             meaning = ISSUE_MEANING.get(res.issue_key, "")
             query = f"{tri.get('scheme', '')}: {meaning}. {tri.get('summary_en', text)}"
-            ctx = await self.meko.context_search(query, res.conversation_id, AGENT_TRIAGE, limit=5)
+            # Live 10 Nov: Meko auto-creates memories from every conversation turn; after many runs they filled the
+            # top 8 places and pushed the approved fixes out of a top-5 search. So fetch 20 memories (the limit is
+            # per source; only the 5 best knowledge chunks are used below).
+            ctx = await self.meko.context_search(query, res.conversation_id, AGENT_TRIAGE, limit=MEMORY_SEARCH_LIMIT)
             buckets = ctx.get("results", ctx) if isinstance(ctx, dict) else {}
             memories = _as_list(buckets.get("memory"))
             kb = _as_list(buckets.get("knowledge_base"))
@@ -346,9 +350,18 @@ class HelpDesk:
         added = await self.meko.memory_add(text, res.conversation_id, AGENT_CASEWORKER, meta)
         mem_ids = [r.get("id") for r in _as_list(added) if r.get("id")]
         self.last_promote_error = None
+        self.last_promoted_id = None
         if promote and mem_ids:
-            try:  # promote = move the fix to the shared learnings layer (one-way in Meko)
-                await self.meko.memory_promote(mem_ids, res.conversation_id, AGENT_CASEWORKER)
+            # Live 10 Nov: memory_promote MOVES a memory into Meko's separate promoted store, where memory_search /
+            # context_search no longer find it (memory_get_by_id -> not_found). So the searchable copy above stays
+            # for reuse, and a second copy goes to the shared learnings layer.
+            try:
+                copy = await self.meko.memory_add(text, res.conversation_id, AGENT_CASEWORKER,
+                                                  {**meta, "copy_of": mem_ids[0], "layer": "promoted"})
+                copy_ids = [r.get("id") for r in _as_list(copy) if r.get("id")]
+                if copy_ids:
+                    await self.meko.memory_promote(copy_ids, res.conversation_id, AGENT_CASEWORKER)
+                    self.last_promoted_id = copy_ids[0]
             except Exception as e:  # the fix is already saved; promoting is a bonus, so never lose it
                 self.last_promote_error = str(e)[:300]
         await self._log_decision(res, caseworker, "approved", fix, mem_ids[0] if mem_ids else None)
