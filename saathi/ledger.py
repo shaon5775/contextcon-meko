@@ -184,27 +184,53 @@ class PgLedger(_Base):
                                          conversation_id=conv), "computes", "endpoints")
         writer = next((c for c in computes if "write" in str(find_key(c, ("role", "type")) or "").lower()), None)
         log("writer:", safe(writer))
-        if writer is None or cidr not in json.dumps(writer):
-            # Colab's public IP changes per runtime; the allow-list is fixed per endpoint -> recreate the writer.
-            if writer is not None:
-                await meko.call("amp_compute_delete", cluster_id=cluster_id, branch_id=branch_id,
-                                compute_id=find_key(writer, ("compute_id", "id")), conversation_id=conv)
-            writer = await meko.call("amp_compute_create", cluster_id=cluster_id, branch_id=branch_id,
-                                     role="read_write", password=pw, connectivity_mode="ingress_external",
-                                     allowed_cidrs=[cidr], conversation_id=conv)
-            log("new writer:", safe(writer))
-        host = find_key(writer, ("host", "hostname", "address", "external_address", "endpoint"))
+        if writer is not None:
+            # Live 10 Nov 2026: the listing does NOT show the allow-list, so first just try to log in.
+            ledger, err = await cls._login(writer, pw, log, tries=10)
+            if ledger:
+                return ledger
+            log(f"existing writer unreachable from {ip} ({err[:120]}) -> re-creating it for this IP")
+            await meko.call("amp_compute_delete", cluster_id=cluster_id, branch_id=branch_id,
+                            compute_id=find_key(writer, ("compute_id", "id")), conversation_id=conv)
+        # Colab's public IP changes per runtime and the allow-list is fixed per endpoint -> (re)create the writer.
+        writer = await meko.call("amp_compute_create", cluster_id=cluster_id, branch_id=branch_id,
+                                 role="read_write", password=pw, connectivity_mode="ingress_external",
+                                 allowed_cidrs=[cidr], conversation_id=conv)
+        log("new writer:", safe(writer))
+        if not find_key(writer, ("address", "host", "hostname")):   # create may not return the address -> list
+            computes = items(await meko.call("amp_compute_list", cluster_id=cluster_id, branch_id=branch_id,
+                                             conversation_id=conv), "computes", "endpoints")
+            writer = next((c for c in computes if "write" in str(find_key(c, ("role",)) or "").lower()), writer)
+        ledger, err = await cls._login(writer, pw, log, tries=16)   # a NEW address needs a few minutes for DNS
+        if ledger:
+            return ledger
+        raise RuntimeError(f"Could not log in to the AMP database: {err}")
+
+    @classmethod
+    async def _login(cls, writer, pw: str, log, tries: int):
+        """Log in to the endpoint. DNS errors (brand-new address) are retried every 15 s; wrong user -> next user."""
+        import asyncio
+        host = find_key(writer, ("address", "host", "hostname", "external_address", "endpoint"))
         port = int(find_key(writer, ("port",)) or 5432)
-        user = find_key(writer, ("user", "username", "db_user")) or "cloud_admin"
+        user = find_key(writer, ("login_user", "user", "username", "db_user")) or "cloud_admin"
         dbname = find_key(writer, ("database", "dbname", "db_name")) or "postgres"
         if isinstance(host, str) and ":" in host and not host.startswith("["):
             host, _, p = host.partition(":")
             port = int(p) if p.isdigit() else port
-        last = None
-        for u in dict.fromkeys([user, "cloud_admin", "admin"]):
-            try:
-                return cls(host=host, port=port, user=u, password=pw, dbname=dbname)
-            except Exception as e:  # noqa: BLE001
-                last = e
-                log(f"login as {u} failed: {str(e)[:150]}")
-        raise RuntimeError(f"Could not log in to the AMP database: {last}")
+        err = "no address"
+        for attempt in range(tries):
+            dns_problem = False
+            for u in dict.fromkeys([user, "admin", "cloud_admin"]):
+                try:
+                    return cls(host=host, port=port, user=u, password=pw, dbname=dbname), ""
+                except Exception as e:  # noqa: BLE001
+                    err = str(e)
+                    if "resolve host" in err or "Name or service not known" in err:
+                        dns_problem = True
+                        break
+                    log(f"login as {u} failed: {err[:150]}")
+            if not dns_problem:
+                return None, err
+            log(f"address {host} not live yet (try {attempt + 1}/{tries}), waiting 15 s")
+            await asyncio.sleep(15)
+        return None, err
