@@ -37,6 +37,18 @@ async def _connect_ledger():
         return await PgLedger.connect(meko, conv, Settings().meko_api_key, create=False, log=lambda *a: None)
 
 
+def _run_coro(make_coro):
+    """asyncio.run(), also when called from inside a running event loop (e.g. the first question of a session opens
+    the ledger from inside ask()): then the coroutine runs in its own thread with its own loop. Fix 15 Nov 2026."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(make_coro())
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(make_coro())).result()
+
+
 def get_ledger():
     """The Postgres ledger INSIDE the Meko datapack (Meko AMP): one row per answer and per caseworker decision.
     Offline demo = the same tables in SQLite. Connected once per browser session; never blocks the help desk."""
@@ -48,7 +60,7 @@ def get_ledger():
         else:
             try:
                 with st.spinner("Connecting to the Postgres ledger inside the Meko datapack (first time can take ~1 min)..."):
-                    st.session_state[key] = asyncio.run(_connect_ledger())
+                    st.session_state[key] = _run_coro(_connect_ledger)
             except Exception as e:  # noqa: BLE001 - the help desk still works without the ledger
                 st.session_state[key] = None
                 st.session_state.ledger_error = str(e)[:200]
